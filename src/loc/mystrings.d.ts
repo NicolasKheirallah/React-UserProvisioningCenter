@@ -1,0 +1,467 @@
+declare interface IUpcStrings {
+  // Shell
+  AppTitle: string;
+  AppDescription: string;
+  TabDashboard: string;
+  TabNewUser: string;
+  LoadingLabel: string;
+  EmptyGenericTitle: string;
+  EmptyGenericBody: string;
+  ErrorGenericTitle: string;
+  CorrelationIdLabel: string;
+  RetryLabel: string;
+  RefreshLabel: string;
+  CloseLabel: string;
+
+  // Draft persistence
+  TabDraftBadge: string;
+  StartOverLabel: string;
+  DiscardDraftTitle: string;
+  DiscardDraftBody: string;
+  DiscardDraftConfirm: string;
+  KeepEditingLabel: string;
+
+  // Preflight
+  PreflightMissingTitle: string;
+  PreflightMissingIntro: string;
+  PreflightErrorTitle: string;
+
+  // Wizard chrome
+  WizardTitle: string;
+  WizardStepPersonal: string;
+  WizardStepEmployment: string;
+  WizardStepIdentity: string;
+  WizardStepAccount: string;
+  WizardStepLicenses: string;
+  WizardStepAccess: string;
+  WizardStepReview: string;
+  WizardStepDescPersonal: string;
+  WizardStepDescEmployment: string;
+  WizardStepDescIdentity: string;
+  WizardStepDescAccount: string;
+  WizardStepDescLicenses: string;
+  WizardStepDescAccess: string;
+  WizardStepDescReview: string;
+
+  AccessSecurityGroupsLabel: string;
+  AccessSecurityGroupsHint: string;
+  AccessM365GroupsLabel: string;
+  AccessM365GroupsHint: string;
+  AccessTeamsLabel: string;
+  AccessTeamsHint: string;
+  AccessSitesLabel: string;
+  AccessSitesHint: string;
+  AccessApplicationsLabel: string;
+  AccessApplicationsHint: string;
+  AccessGroupSearchPlaceholder: string;
+  AccessGroupSearchHint: string;
+  AccessGroupSearchNoMatches: string;
+  AccessCatalogNoMatches: string;
+  AccessRoleMember: string;
+  AccessRoleOwner: string;
+  AccessRoleVisitor: string;
+  AccessExpirationLabel: string;
+  AccessExpirationHint: string;
+  AccessNoCatalogItems: string;
+  AccessExpirationNone: string;
+  ApproverGroupIdLabel: string;
+  ApproverGroupIdHint: string;
+  ApprovalRestrictedMessage: string;
+  ApprovalRestrictedNotMember: string;
+
+  IdentityAccountTypeLabel: string;
+  IdentityAccountTypeMember: string;
+  IdentityAccountTypeGuest: string;
+  IdentityGuestEmailLabel: string;
+  IdentityGuestIntro: string;
+  CloneFromLabel: string;
+  CloneFromHint: string;
+  WizardStepsAriaLabel: string;
+  WizardStepCompletedAria: string;
+  WizardStepOfLabel: string;
+  BackLabel: string;
+  NextLabel: string;
+  SubmitLabel: string;
+  SubmitNoApprovalLabel: string;
+  SubmittingLabel: string;
+  SubmitSuccess: string;
+  SubmitSuccessNoApproval: string;
+  SubmitFailure: string;
+  WizardStepDescReviewNoApproval: string;
+  ReviewIntroNoApproval: string;
+  OffboardStepDescReviewNoApproval: string;
+  OffboardSubmitSuccessNoApproval: string;
+  BulkIntroNoApproval: string;
+
+  // Field labels
+  FirstNameLabel: string;
+  LastNameLabel: string;
+  DisplayNameLabel: string;
+  EmployeeIdLabel: string;
+  MobilePhoneLabel: string;
+  PersonalEmailLabel: string;
+  PhotoLabel: string;
+  PhotoHint: string;
+  ChoosePhotoLabel: string;
+  ChangePhotoLabel: string;
+  RemovePhotoLabel: string;
+  PhotoUploadError: string;
+  JobTitleLabel: string;
+  DepartmentLabel: string;
+  CompanyLabel: string;
+  OfficeLabel: string;
+  CountryLabel: string;
+  CountryHint: string;
+  ManagerLabel: string;
+  ManagerSearchPlaceholder: string;
+  EmployeeTypeLabel: string;
+  EmployeeTypeEmployee: string;
+  EmployeeTypeContractor: string;
+  HireDateLabel: string;
+  DomainLabel: string;
+  UpnLabel: string;
+  MailNicknameLabel: string;
+  UsageLocationLabel: string;
+  AccountEnabledLabel: string;
+  CredentialModeLabel: string;
+  CredentialModePassword: string;
+  CredentialModeTap: string;
+  ForceChangePasswordLabel: string;
+
+  // Validation messages
+  ValidationRequired: string;
+  ValidationTooLong: string;
+  ValidationInvalidEmail: string;
+  ValidationInvalidPhone: string;
+  ValidationInvalidDate: string;
+  ValidationInvalidCountry: string;
+  ValidationInvalidChoice: string;
+  ValidationInvalidUpn: string;
+  ValidationInvalidLocalPart: string;
+  EmployeeIdDuplicate: string;
+  EmployeeIdChecking: string;
+
+  // Identity step
+  IdentityCandidatesLabel: string;
+  IdentityRecommended: string;
+  IdentityAlternatives: string;
+  IdentityRejectedTitle: string;
+  IdentityReasonReserved: string;
+  IdentityReasonCollision: string;
+  IdentityReasonCollisionDeleted: string;
+  IdentityNoCandidate: string;
+  IdentityResolving: string;
+  IdentityNeedsNames: string;
+
+  // License step
+  LicenseColumnProduct: string;
+  LicenseColumnAvailable: string;
+  LicenseColumnCost: string;
+  LicenseExhausted: string;
+  LicenseNoCost: string;
+  LicenseTotalPerMonth: string;
+
+  // Review step
+  ReviewIntro: string;
+  ReviewNoLicenses: string;
+  ReviewNoManager: string;
+  ReviewNoCountry: string;
+  ReviewApproverGroupDefault: string;
+  ReviewPhotoAttached: string;
+  ReviewPhotoNone: string;
+  ReviewEditLabel: string;
+  ReviewEditSectionAria: string;
+  ReviewValidationTitle: string;
+
+  // Jobs
+  JobsTitle: string;
+  JobsEmptyTitle: string;
+  JobsEmptyBody: string;
+  JobsEmptyCta: string;
+  JobColumnJob: string;
+  JobColumnCreated: string;
+  JobColumnActions: string;
+  ApprovedByLabel: string;
+  JobColumnType: string;
+  JobColumnTarget: string;
+  JobColumnStatus: string;
+  JobColumnRequestedBy: string;
+  JobDetailTitle: string;
+  JobStepsTitle: string;
+  ApproveLabel: string;
+  RunLabel: string;
+  ResumeLabel: string;
+  RetryStepLabel: string;
+  SkipStepLabel: string;
+  CancelJobLabel: string;
+  RegenerateCredentialsLabel: string;
+  CancelJobDialogTitle: string;
+  CancelJobDialogBody: string;
+  KeepJobLabel: string;
+  JobRunningLabel: string;
+  JobAttemptsLabel: string;
+  JobStatusAnnouncement: string;
+  JobApprovedToast: string;
+  JobCancelledToast: string;
+  JobActionFailed: string;
+  JobProgressLabel: string;
+  JobDoNotClose: string;
+  JobCompletedOf: string;
+  JobElapsedLabel: string;
+  JobStepStarting: string;
+
+  // Job/step statuses
+  StatusDraft: string;
+  StatusPendingApproval: string;
+  StatusApproved: string;
+  StatusScheduled: string;
+  StatusRunning: string;
+  StatusPartiallyFailed: string;
+  StatusFailed: string;
+  StatusCompleted: string;
+  StatusCancelled: string;
+  StepStatusPending: string;
+  StepStatusRunning: string;
+  StepStatusCompleted: string;
+  StepStatusFailed: string;
+  StepStatusSkipped: string;
+
+  // Step display names
+  StepValidateInput: string;
+  StepCreateUser: string;
+  StepSetUsageLocation: string;
+  StepAssignManager: string;
+  StepAssignLicenses: string;
+  StepPresentCredentials: string;
+  StepFinalizeAudit: string;
+
+  // Job types
+  JobTypeOnboard: string;
+  JobTypeOffboard: string;
+  JobTypeTransfer: string;
+  JobTypeClone: string;
+  JobTypeBulk: string;
+
+  // Dashboard
+  KpiFailed7: string;
+  KpiCompleted7: string;
+  SearchJobsPlaceholder: string;
+  FilterTypeAll: string;
+  JobsNoMatches: string;
+
+  // Templates
+  TabTemplates: string;
+  TemplatesTitle: string;
+  TemplatesEmptyTitle: string;
+  TemplatesEmptyBody: string;
+  NewTemplateLabel: string;
+  TemplateNameLabel: string;
+  TemplateColumnName: string;
+  TemplateColumnActive: string;
+  TemplateColumnVersion: string;
+  TemplateInactiveLabel: string;
+  TemplateActiveLabel: string;
+  TemplateSavedToast: string;
+  TemplateEditTitle: string;
+  SaveLabel: string;
+  CancelLabel: string;
+  StartFromTemplateLabel: string;
+  StartFromBlank: string;
+  TemplateAppliedToast: string;
+
+  // Offboarding
+  TabOffboard: string;
+  OffboardTitle: string;
+  OffboardStepTarget: string;
+  OffboardStepAccess: string;
+  OffboardStepTiming: string;
+  OffboardStepDescTarget: string;
+  OffboardStepDescAccess: string;
+  OffboardStepDescTiming: string;
+  OffboardStepDescReview: string;
+  OffboardUserLabel: string;
+  OffboardAlwaysBlock: string;
+  OffboardRemoveLicensesLabel: string;
+  OffboardRemoveGroupsLabel: string;
+  OffboardMailboxLabel: string;
+  OffboardMailboxNone: string;
+  OffboardMailboxShared: string;
+  OffboardMailboxForward: string;
+  OffboardForwardAddressLabel: string;
+  OffboardOneDriveLabel: string;
+  OffboardTimingImmediate: string;
+  OffboardTimingScheduled: string;
+  OffboardDateLabel: string;
+  OffboardSubmitSuccess: string;
+  ScheduledForLabel: string;
+  YesLabel: string;
+  NoLabel: string;
+  StepValidateTarget: string;
+  StepBlockSignIn: string;
+  StepRemoveLicenses: string;
+  StepRemoveGroups: string;
+  StepCreateHandoverTasks: string;
+
+  // Transfer
+  TabTransfer: string;
+  TransferTitle: string;
+  TransferIntro: string;
+  TransferUserLabel: string;
+  TransferLeaveBlankHint: string;
+  TransferAddLicensesLabel: string;
+  TransferRemoveLicensesLabel: string;
+  TransferNoCurrentLicenses: string;
+
+  // Bulk import
+  TabBulk: string;
+  BulkTitle: string;
+  BulkIntro: string;
+  BulkDownloadTemplate: string;
+  BulkChooseFile: string;
+  BulkValidateLabel: string;
+  BulkValidatingLabel: string;
+  BulkReadySummary: string;
+  BulkSubmitLabel: string;
+  BulkSubmittedToast: string;
+  BulkTooManyRows: string;
+  BulkNoDataRows: string;
+  BulkMissingColumns: string;
+  BulkColumnRow: string;
+  BulkColumnProblems: string;
+  BulkRowReady: string;
+  BulkRowError: string;
+  BulkErrDuplicateInFile: string;
+  BulkErrUnknownLicense: string;
+  BulkErrUnknownDomain: string;
+  BulkErrNoUpn: string;
+  BulkErrDuplicateUpn: string;
+  BulkErrUnknownTemplate: string;
+
+  // Bulk offboarding
+  TabBulkOffboard: string;
+  BulkOffboardTitle: string;
+  BulkOffboardIntro: string;
+  BulkOffboardIntroNoApproval: string;
+  BulkOffboardSubmitLabel: string;
+  BulkOffboardSubmittedToast: string;
+  BulkErrInvalidMailboxAction: string;
+  BulkErrUserNotFound: string;
+  OffboardForwardingRequired: string;
+
+  // Service desk tasks
+  TabTasks: string;
+  TasksTitle: string;
+  TasksEmptyTitle: string;
+  TasksEmptyBody: string;
+  ShowCompletedLabel: string;
+  MarkDoneLabel: string;
+  TaskCompletedToast: string;
+  TaskStatusOpen: string;
+  TaskStatusDone: string;
+  TaskCompletedByLabel: string;
+  TasksColumnTitle: string;
+  TasksColumnType: string;
+  TasksColumnInstructions: string;
+  TasksColumnAssignedTo: string;
+  ExportCsvLabel: string;
+  TaskTypeMailboxConvertShared: string;
+  TaskTypeMailboxDelegation: string;
+  TaskTypeMailForwarding: string;
+  TaskTypeHideFromGal: string;
+  TaskTypeDistributionList: string;
+  TaskTypeLitigationHold: string;
+  TaskTypeOneDriveHandling: string;
+  TaskTypeAutoReply: string;
+  TaskTypeHardware: string;
+  TaskTypeThirdPartyApp: string;
+  TaskTypeOnPremAdAccount: string;
+  TaskTypeGroupAssignment: string;
+  TaskTypeTeamAssignment: string;
+  TaskTypeSharePointAccess: string;
+  TaskTypeApplicationAssignment: string;
+  TaskTypeAccessReview: string;
+  TaskTypeOther: string;
+
+  // Settings tab
+  TabSettings: string;
+  SettingsTitle: string;
+  SettingsIntro: string;
+  SettingsRequireApprovalLabel: string;
+  SettingsRequireApprovalHint: string;
+  SettingsBulkLimitLabel: string;
+  SettingsRefreshLabel: string;
+  SettingsSavedToast: string;
+  SettingsSaveFailed: string;
+  SettingsLoadError: string;
+
+  // Roles tab
+  TabRoles: string;
+  RolesTitle: string;
+  RolesIntro: string;
+  RolesGroupIdLabel: string;
+  RolesGroupIdHint: string;
+  RolesPermissionsLabel: string;
+  RolesSavedToast: string;
+  RolesSaveFailed: string;
+  RolesEmptyTitle: string;
+  RolesEmptyBody: string;
+  PermissionCreateJobs: string;
+  PermissionApproveJobs: string;
+  PermissionRunJobs: string;
+  PermissionRetrySteps: string;
+  PermissionSkipSteps: string;
+  PermissionCancelJobs: string;
+  PermissionManageTemplates: string;
+  PermissionViewAudit: string;
+  PermissionManageTasks: string;
+  PermissionManageSettings: string;
+
+  // Dashboard truncation
+  JobsTruncatedWarning: string;
+
+  // Dashboard visualizations
+  DashboardOverviewTitle: string;
+  DashboardJobsByStatus: string;
+  DashboardJobsByType: string;
+  DashboardTotalJobs: string;
+  DashboardSuccessRate: string;
+  DashboardTrend7Days: string;
+  DashboardOnboarding: string;
+  DashboardOffboarding: string;
+  DashboardPendingReview: string;
+  DashboardActiveNow: string;
+  DashboardNeedsAttention: string;
+  DashboardCompletedToday: string;
+  DashboardNoActivity: string;
+  DashboardStatusLegend: string;
+  DashboardTypeLegend: string;
+  DashboardToday: string;
+  DashboardDays: string;
+
+  // Audit trail
+  AuditTitle: string;
+  AuditEmpty: string;
+  AuditColumnTimestamp: string;
+  AuditColumnActor: string;
+  AuditColumnAction: string;
+  AuditColumnEndpoint: string;
+  AuditColumnResponseCode: string;
+  AuditColumnResult: string;
+  AuditResultSuccess: string;
+  AuditResultFailure: string;
+  AuditResultSkipped: string;
+
+  // Copy-once dialog
+  CredentialDialogTitle: string;
+  CredentialDialogBodyPassword: string;
+  CredentialDialogBodyTap: string;
+  CredentialDialogWarning: string;
+  CopyLabel: string;
+  CopiedLabel: string;
+  CredentialDialogConfirm: string;
+}
+
+declare module 'UpcStrings' {
+  const strings: IUpcStrings;
+  export = strings;
+}
