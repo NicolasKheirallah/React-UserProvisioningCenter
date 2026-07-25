@@ -78,6 +78,7 @@ define([], function () {
     CloneFromHint: 'Kopierar denna persons licenser och kvalificerade gruppmedlemskap till den nyanställda, utöver det som väljs nedan.',
     WizardStepsAriaLabel: 'Guidens steg',
     WizardStepCompletedAria: 'slutfört',
+    WizardStepHasErrorsAria: 'behöver åtgärdas',
     WizardStepOfLabel: 'Steg {0} av {1}',
     BackLabel: 'Tillbaka',
     NextLabel: 'Nästa',

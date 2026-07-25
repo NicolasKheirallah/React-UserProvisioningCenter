@@ -3,6 +3,13 @@ import { Button, Subtitle1, makeStyles, tokens } from '@fluentui/react-component
 import * as strings from 'UpcStrings';
 import { isDraftDirty, useWizard } from '../../contexts/WizardContext';
 import { useServices } from '../../contexts/ServicesContext';
+import {
+  accountSettingsSchema,
+  employmentSchema,
+  identitySchema,
+  licensesSchema,
+  personalSchema
+} from '../../validators/wizardSchemas';
 import { ConfirmDialog } from '../Shared/ConfirmDialog';
 import { AppErrorBoundary } from '../Shared/AppErrorBoundary';
 import { WizardStepper } from './WizardStepper';
@@ -84,6 +91,20 @@ export const OnboardingWizard: React.FC<IOnboardingWizardProps> = ({ onSubmitted
     [services, state.step]
   );
 
+  // Steps already passed can go invalid after the fact — e.g. applying a
+  // department template while revisiting an earlier step. Re-check each
+  // completed step's own schema so the rail flags it before Review, instead
+  // of the operator discovering it only from the Review step's error list.
+  const errorSteps: ReadonlySet<number> = React.useMemo(() => {
+    const errors = new Set<number>();
+    if (state.step > 0 && !personalSchema.isValidSync(state.draft.personal)) errors.add(0);
+    if (state.step > 1 && !employmentSchema.isValidSync(state.draft.employment)) errors.add(1);
+    if (state.step > 2 && (!state.draft.identity || !identitySchema.isValidSync(state.draft.identity))) errors.add(2);
+    if (state.step > 3 && !accountSettingsSchema.isValidSync(state.draft.accountSettings)) errors.add(3);
+    if (state.step > 4 && !licensesSchema.isValidSync({ licenses: state.draft.licenses })) errors.add(4);
+    return errors;
+  }, [state.step, state.draft]);
+
   return (
     <div className={styles.root}>
       <div className={styles.titleRow}>
@@ -97,7 +118,7 @@ export const OnboardingWizard: React.FC<IOnboardingWizardProps> = ({ onSubmitted
         ) : undefined}
       </div>
       <div className={styles.body}>
-        <WizardStepper labels={STEP_LABELS} current={state.step} onStepClick={onStepClick} />
+        <WizardStepper labels={STEP_LABELS} current={state.step} onStepClick={onStepClick} errorSteps={errorSteps} />
         <div className={styles.content}>
           {/* Keyed on the step index: a crash in one step's render no longer
               blanks the whole wizard (stepper/title survive), and navigating

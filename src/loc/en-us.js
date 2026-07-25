@@ -78,6 +78,7 @@ define([], function () {
     CloneFromHint: 'Copies this person’s licenses and eligible group memberships onto the new hire, in addition to anything selected below.',
     WizardStepsAriaLabel: 'Wizard steps',
     WizardStepCompletedAria: 'completed',
+    WizardStepHasErrorsAria: 'needs attention',
     WizardStepOfLabel: 'Step {0} of {1}',
     BackLabel: 'Back',
     NextLabel: 'Next',

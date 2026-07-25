@@ -78,6 +78,7 @@ declare interface IUpcStrings {
   CloneFromHint: string;
   WizardStepsAriaLabel: string;
   WizardStepCompletedAria: string;
+  WizardStepHasErrorsAria: string;
   WizardStepOfLabel: string;
   BackLabel: string;
   NextLabel: string;

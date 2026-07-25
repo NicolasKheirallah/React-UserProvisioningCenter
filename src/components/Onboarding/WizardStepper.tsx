@@ -9,7 +9,7 @@ import {
   shorthands,
   tokens
 } from '@fluentui/react-components';
-import { CheckmarkFilled } from '@fluentui/react-icons';
+import { CheckmarkFilled, Warning16Filled } from '@fluentui/react-icons';
 import * as strings from 'UpcStrings';
 import { formatString } from '../Shared/format';
 
@@ -91,6 +91,11 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorBrandBackground,
     color: tokens.colorNeutralForegroundOnBrand
   },
+  indicatorError: {
+    ...shorthands.borderColor(tokens.colorPaletteRedBorder2),
+    backgroundColor: tokens.colorPaletteRedBackground2,
+    color: tokens.colorPaletteRedForeground1
+  },
   labelCurrent: {
     fontWeight: tokens.fontWeightSemibold
   },
@@ -110,6 +115,10 @@ export interface IWizardStepperProps {
   current: number;
   /** Only completed (earlier) steps are navigable. */
   onStepClick: (step: number) => void;
+  /** Completed steps whose data no longer passes validation (e.g. a later
+   *  template apply changed an earlier step's fields) — shown with a warning
+   *  indicator instead of a checkmark so the operator notices before Review. */
+  errorSteps?: ReadonlySet<number>;
 }
 
 /**
@@ -122,7 +131,8 @@ export interface IWizardStepperProps {
 export const WizardStepper: React.FC<IWizardStepperProps> = React.memo(function WizardStepper({
   labels,
   current,
-  onStepClick
+  onStepClick,
+  errorSteps
 }) {
   const styles = useStyles();
   return (
@@ -141,6 +151,12 @@ export const WizardStepper: React.FC<IWizardStepperProps> = React.memo(function 
         {labels.map((label, index) => {
           const done: boolean = index < current;
           const isCurrent: boolean = index === current;
+          const hasError: boolean = done && (errorSteps?.has(index) ?? false);
+          const stepAriaLabel: string = hasError
+            ? `${label} (${strings.WizardStepHasErrorsAria})`
+            : done
+              ? `${label} (${strings.WizardStepCompletedAria})`
+              : label;
           return (
             // Index is a stable, order-guaranteed key here: the step list is
             // a fixed, static array (unlike data-driven lists elsewhere in
@@ -152,18 +168,19 @@ export const WizardStepper: React.FC<IWizardStepperProps> = React.memo(function 
                 className={mergeClasses(styles.item, done && styles.itemClickable)}
                 disabled={!done}
                 aria-current={isCurrent ? 'step' : undefined}
-                aria-label={done ? `${label} (${strings.WizardStepCompletedAria})` : label}
+                aria-label={stepAriaLabel}
                 onClick={done ? () => onStepClick(index) : undefined}
               >
                 <span
                   className={mergeClasses(
                     styles.indicator,
                     isCurrent && styles.indicatorCurrent,
-                    done && styles.indicatorDone
+                    done && !hasError && styles.indicatorDone,
+                    hasError && styles.indicatorError
                   )}
                   aria-hidden="true"
                 >
-                  {done ? <CheckmarkFilled fontSize={12} /> : index + 1}
+                  {hasError ? <Warning16Filled fontSize={12} /> : done ? <CheckmarkFilled fontSize={12} /> : index + 1}
                 </span>
                 <span
                   className={mergeClasses(
