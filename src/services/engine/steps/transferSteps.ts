@@ -12,14 +12,6 @@ import { auditedGraphWrite, getOrNull, runFinalizeAudit } from '../stepHelpers';
 import { isTransferPayload } from '../../../models';
 import type { ITransferChanges, ITransferPayload } from '../../../models';
 
-/**
- * Transfer pipeline: department/job title/office/manager/license changes for
- * an EXISTING user — unlike onboarding/clone, nothing is created. Every
- * `changes` field is optional; only fields actually set are applied, and
- * each write is idempotent (check-before-write) so a resumed job never
- * repeats a completed change.
- */
-
 function transfer(ctx: IStepContext): ITransferPayload {
   const payload = ctx.job.payload;
   if (!isTransferPayload(payload)) {
@@ -27,8 +19,6 @@ function transfer(ctx: IStepContext): ITransferPayload {
   }
   return payload;
 }
-
-// ---- validate-transfer ------------------------------------------------------
 
 async function runValidateTransfer(ctx: IStepContext): Promise<void> {
   const payload: ITransferPayload = transfer(ctx);
@@ -64,8 +54,6 @@ async function runValidateTransfer(ctx: IStepContext): Promise<void> {
   }
 }
 
-// ---- update-employment ------------------------------------------------------
-
 async function runUpdateEmployment(ctx: IStepContext): Promise<void> {
   const payload: ITransferPayload = transfer(ctx);
   const c = payload.changes;
@@ -100,8 +88,6 @@ async function runUpdateEmployment(ctx: IStepContext): Promise<void> {
   );
 }
 
-// ---- update-manager ----------------------------------------------------------
-
 async function runUpdateManager(ctx: IStepContext): Promise<void> {
   const payload: ITransferPayload = transfer(ctx);
   const managerId: string | undefined = payload.changes.managerId;
@@ -120,8 +106,6 @@ async function runUpdateManager(ctx: IStepContext): Promise<void> {
     ctx.graph.put<void>(`/users/${userId}/manager/$ref`, body, { signal: ctx.signal })
   );
 }
-
-// ---- update-licenses ----------------------------------------------------------
 
 async function runUpdateLicenses(ctx: IStepContext): Promise<void> {
   const payload: ITransferPayload = transfer(ctx);
@@ -149,8 +133,6 @@ async function runUpdateLicenses(ctx: IStepContext): Promise<void> {
   );
 }
 
-// ---- send-notifications ------------------------------------------------------
-
 function summarizeChanges(c: ITransferChanges): string {
   const parts: string[] = [];
   if (c.jobTitle) parts.push(`job title -> ${c.jobTitle}`);
@@ -169,10 +151,7 @@ function summarizeChanges(c: ITransferChanges): string {
 async function runSendNotifications(ctx: IStepContext): Promise<void> {
   const payload: ITransferPayload = transfer(ctx);
   const userId: string = payload.target.userId;
-  // The payload only carries a manager when the transfer itself changes one
-  // — fetch the (possibly just-updated) current manager fresh rather than
-  // relying on that, so a transfer that only changes job title still
-  // notifies whoever the user reports to today.
+
   const manager: { mail?: string; userPrincipalName?: string } | null = await getOrNull(() =>
     ctx.graph.get<{ mail?: string; userPrincipalName?: string }>(
       `/users/${userId}/manager?$select=mail,userPrincipalName`,
@@ -181,7 +160,7 @@ async function runSendNotifications(ctx: IStepContext): Promise<void> {
   );
   const notifyAddress: string | undefined = manager?.mail || manager?.userPrincipalName;
   if (!notifyAddress) {
-    return; // no manager on file — nobody to notify
+    return;
   }
   const body = {
     message: {
@@ -200,9 +179,6 @@ async function runSendNotifications(ctx: IStepContext): Promise<void> {
     ctx.graph.post<void>('/me/sendMail', body, { signal: ctx.signal })
   );
 }
-
-// ---- registry --------------------------------------------------------------------
-// runFinalizeAudit is shared with onboardingSteps.ts/offboardingSteps.ts — see stepHelpers.ts.
 
 export const TRANSFER_STEPS: IWorkflowStepDefinition[] = [
   { id: STEP_VALIDATE_TRANSFER, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runValidateTransfer },

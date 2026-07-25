@@ -3,10 +3,6 @@ import type { GraphService } from '../graph/GraphService';
 import type { SharePointDataService } from '../sharePointData/SharePointDataService';
 import type { AppPermission, IRoleDefinition } from '../../models';
 
-// Every permission verb the app currently defines. Kept as a literal list
-// (not derived from the AppPermission union, which has no runtime form) so
-// this test fails loudly the day a new permission is added to models/IRoles.ts
-// without deciding whether ITAdmin — the app's superuser role — should have it.
 const ALL_PERMISSIONS: AppPermission[] = [
   'createJobs',
   'approveJobs',
@@ -36,10 +32,7 @@ function makeData(definitions: IRoleDefinition[]): SharePointDataService {
 
 describe('DEFAULT_ROLE_PERMISSIONS', () => {
   it('ITAdmin (the seeded superuser role) is granted every permission the app defines', () => {
-    // Regression test for the bug where the Settings tab was unreachable by
-    // every role — including ITAdmin — out of the box, because
-    // DEFAULT_ROLE_PERMISSIONS.ITAdmin was missing 'manageSettings' and
-    // listSeedItems.ts seeds UPC_Roles rows straight from this constant.
+
     for (const permission of ALL_PERMISSIONS) {
       expect(DEFAULT_ROLE_PERMISSIONS.ITAdmin).toContain(permission);
     }

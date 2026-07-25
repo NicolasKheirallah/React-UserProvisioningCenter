@@ -206,11 +206,11 @@ describe('offboarding: block-sign-in', () => {
     const job: IProvisioningJob = await h.engine.runJob(1);
 
     expect(job.status).toBe('Completed');
-    // The synced-attribute write must never be attempted.
+
     expect(h.graph.calls.some((c) => c.method === 'PATCH' && c.path === '/users/user-123')).toBe(false);
-    // Session revocation still happens — it isn't attribute-sync-dependent.
+
     expect(h.graph.countCalls('POST', '/users/user-123/revokeSignInSessions')).toBe(1);
-    // A task hands the on-prem action off to whoever manages AD.
+
     expect(h.data.tasks).toHaveLength(1);
     expect(h.data.tasks[0].taskType).toBe('OnPremAdAccount');
     expect(h.data.tasks[0].instructions).toContain('on-prem');

@@ -62,10 +62,6 @@ const useStyles = makeStyles({
   }
 });
 
-/**
- * Wizard step 1 — Personal. The duplicate employeeId check runs against
- * Entra before the step can be left (Phase 1 acceptance criterion).
- */
 export const PersonalStep: React.FC = () => {
   const styles = useStyles();
   const { state, dispatch } = useWizard();
@@ -111,10 +107,6 @@ export const PersonalStep: React.FC = () => {
   const { register, handleSubmit, setError, setValue, watch, getValues, formState, reset } = form;
   const errors = formState.errors;
 
-  // Re-seed the form ONLY on mount (when navigating back to this step) — not
-  // on every draft change, which would wipe an in-progress edit. defaultValues
-  // already seeds from the draft on mount, so this is only needed if RHF
-  // fails to pick up defaults (a known RHF edge case with remounting forms).
   const seeded = React.useRef(false);
   React.useEffect(() => {
     if (seeded.current) {
@@ -125,12 +117,6 @@ export const PersonalStep: React.FC = () => {
     displayNameTouched.current = !!state.draft.personal.displayName;
   }, [reset, state.draft.personal]);
 
-  // Persist edits into the wizard context when the operator navigates away
-  // (Back, stepper, Next all unmount this step) rather than on every
-  // keystroke — the wizard root re-renders on every dispatch, so a per-
-  // keystroke dispatch here re-rendered the whole app shell on every
-  // character typed. onValid below still dispatches explicitly on the
-  // happy path so 'next' never races this unmount-time save.
   useSaveOnUnmount(() => {
     dispatch({ type: 'savePersonal', personal: getValues() });
   });
@@ -175,8 +161,7 @@ export const PersonalStep: React.FC = () => {
       dispatch({ type: 'savePersonal', personal: values });
       dispatch({ type: 'next' });
     } catch {
-      // Directory unreachable: keep the operator on the step; the engine
-      // re-validates server-side data in validate-input anyway.
+
       setError('employeeId', { type: 'validate', message: strings.ErrorGenericTitle });
     } finally {
       setChecking(false);

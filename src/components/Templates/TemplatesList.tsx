@@ -52,10 +52,6 @@ const useStyles = makeStyles({
   }
 });
 
-/**
- * Template management (manageTemplates permission). Templates pre-fill the
- * onboarding wizard; rows open the editor drawer.
- */
 export const TemplatesList: React.FC = () => {
   const styles = useStyles();
   const templates = useAllTemplates();

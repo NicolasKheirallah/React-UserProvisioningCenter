@@ -17,32 +17,17 @@ export interface IWizardDraft {
   licenses: ILicenseSelection[];
   access: IAccessGrants;
   expirationReviewDays: number | null;
-  /** Set via the "Clone access from" picker — makes this a Clone job. */
   cloneSourceUserId?: string;
   cloneSourceDisplayName?: string;
-  /**
-   * Snapshotted from the applied template's approverGroupId (null if the
-   * template set none, or none was applied) — gates who can approve this
-   * job once submitted. See JobDetailDrawer's showApprove logic.
-   */
   approverGroupId: string | null;
 }
 
 export interface IWizardState {
   step: number;
   draft: IWizardDraft;
-  /**
-   * Tracks "the operator has entered something or advanced past step 1",
-   * maintained incrementally by the reducer instead of derived by deep-
-   * comparing the draft on every render (isDraftDirty used to JSON.stringify
-   * it on every keystroke, in every consumer). Sticky by design: once set it
-   * stays true until 'reset', even if edits are undone back to blank — the
-   * same trade-off most form "dirty" trackers make.
-   */
   dirty: boolean;
 }
 
-/** Personal, Employment, Identity, Account, Licenses, Access, Review. */
 export const WIZARD_STEP_COUNT: number = 7;
 
 export const initialWizardState: IWizardState = {
@@ -93,7 +78,6 @@ export type WizardAction =
   | { type: 'saveAccess'; access: IAccessGrants; expirationReviewDays?: number | null }
   | { type: 'setCloneSource'; userId: string | undefined; displayName: string | undefined }
   | {
-      /** Seeds employment/account/license/access defaults from a department template. */
       type: 'applyTemplate';
       department: string;
       usageLocation?: string;
@@ -152,11 +136,7 @@ export function wizardReducer(state: IWizardState, action: WizardAction): IWizar
         }
       };
     case 'applyTemplate': {
-      // Merge template licenses over the user's existing selections — any
-      // template license not already selected is added. Existing manual
-      // selections are preserved (no silent data loss). Access grants merge
-      // the same way (union, no duplicates); expirationReviewDays overwrites
-      // since it's a single tenant-set policy value, not a per-item list.
+
       const existingSkus: Set<string> = new Set(state.draft.licenses.map((l) => l.skuId));
       const merged: ILicenseSelection[] = [...state.draft.licenses];
       for (const tpl of action.licenses) {
@@ -183,9 +163,7 @@ export function wizardReducer(state: IWizardState, action: WizardAction): IWizar
             action.expirationReviewDays !== undefined
               ? action.expirationReviewDays
               : state.draft.expirationReviewDays,
-          // Replace, not merge — approval routing is a single authoritative
-          // value from whichever template was applied most recently, unlike
-          // access grants which accumulate.
+
           approverGroupId: action.approverGroupId ?? null
         }
       };
@@ -236,7 +214,6 @@ function unionByKey<T>(current: T[], incoming: T[] | undefined, keyOf: (item: T)
   return merged;
 }
 
-/** True once the operator has entered anything or advanced past step 1. */
 export function isDraftDirty(state: IWizardState): boolean {
   return state.dirty;
 }

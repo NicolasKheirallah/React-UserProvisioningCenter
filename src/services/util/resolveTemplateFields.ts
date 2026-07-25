@@ -8,14 +8,6 @@ export interface IResolvedTemplateFields {
   expirationReviewDays: number | null;
 }
 
-/**
- * Maps a department template's stored fields onto what an onboarding payload
- * needs — resolving license skuPartNumbers to this tenant's actual skuIds
- * (templates store the portable part number, not a tenant-specific id) and
- * carrying the access grants through as-is. Shared by the wizard's
- * PersonalStep (applyTemplate) and BulkImport (per-row `template` column) so
- * both onboarding paths treat a template the same way.
- */
 export function resolveTemplateFields(
   template: IDepartmentTemplate,
   licenseOptions: ILicenseOption[]

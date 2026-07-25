@@ -1,5 +1,5 @@
 declare interface IUpcStrings {
-  // Shell
+
   AppTitle: string;
   AppDescription: string;
   TabDashboard: string;
@@ -13,7 +13,6 @@ declare interface IUpcStrings {
   RefreshLabel: string;
   CloseLabel: string;
 
-  // Draft persistence
   TabDraftBadge: string;
   StartOverLabel: string;
   DiscardDraftTitle: string;
@@ -21,12 +20,10 @@ declare interface IUpcStrings {
   DiscardDraftConfirm: string;
   KeepEditingLabel: string;
 
-  // Preflight
   PreflightMissingTitle: string;
   PreflightMissingIntro: string;
   PreflightErrorTitle: string;
 
-  // Wizard chrome
   WizardTitle: string;
   WizardStepPersonal: string;
   WizardStepEmployment: string;
@@ -94,7 +91,6 @@ declare interface IUpcStrings {
   OffboardSubmitSuccessNoApproval: string;
   BulkIntroNoApproval: string;
 
-  // Field labels
   FirstNameLabel: string;
   LastNameLabel: string;
   DisplayNameLabel: string;
@@ -129,7 +125,6 @@ declare interface IUpcStrings {
   CredentialModeTap: string;
   ForceChangePasswordLabel: string;
 
-  // Validation messages
   ValidationRequired: string;
   ValidationTooLong: string;
   ValidationInvalidEmail: string;
@@ -142,7 +137,6 @@ declare interface IUpcStrings {
   EmployeeIdDuplicate: string;
   EmployeeIdChecking: string;
 
-  // Identity step
   IdentityCandidatesLabel: string;
   IdentityRecommended: string;
   IdentityAlternatives: string;
@@ -154,7 +148,6 @@ declare interface IUpcStrings {
   IdentityResolving: string;
   IdentityNeedsNames: string;
 
-  // License step
   LicenseColumnProduct: string;
   LicenseColumnAvailable: string;
   LicenseColumnCost: string;
@@ -162,7 +155,6 @@ declare interface IUpcStrings {
   LicenseNoCost: string;
   LicenseTotalPerMonth: string;
 
-  // Review step
   ReviewIntro: string;
   ReviewNoLicenses: string;
   ReviewNoManager: string;
@@ -174,7 +166,6 @@ declare interface IUpcStrings {
   ReviewEditSectionAria: string;
   ReviewValidationTitle: string;
 
-  // Jobs
   JobsTitle: string;
   JobsEmptyTitle: string;
   JobsEmptyBody: string;
@@ -211,7 +202,6 @@ declare interface IUpcStrings {
   JobElapsedLabel: string;
   JobStepStarting: string;
 
-  // Job/step statuses
   StatusDraft: string;
   StatusPendingApproval: string;
   StatusApproved: string;
@@ -227,7 +217,6 @@ declare interface IUpcStrings {
   StepStatusFailed: string;
   StepStatusSkipped: string;
 
-  // Step display names
   StepValidateInput: string;
   StepCreateUser: string;
   StepSetUsageLocation: string;
@@ -236,21 +225,18 @@ declare interface IUpcStrings {
   StepPresentCredentials: string;
   StepFinalizeAudit: string;
 
-  // Job types
   JobTypeOnboard: string;
   JobTypeOffboard: string;
   JobTypeTransfer: string;
   JobTypeClone: string;
   JobTypeBulk: string;
 
-  // Dashboard
   KpiFailed7: string;
   KpiCompleted7: string;
   SearchJobsPlaceholder: string;
   FilterTypeAll: string;
   JobsNoMatches: string;
 
-  // Templates
   TabTemplates: string;
   TemplatesTitle: string;
   TemplatesEmptyTitle: string;
@@ -270,7 +256,6 @@ declare interface IUpcStrings {
   StartFromBlank: string;
   TemplateAppliedToast: string;
 
-  // Offboarding
   TabOffboard: string;
   OffboardTitle: string;
   OffboardStepTarget: string;
@@ -303,7 +288,6 @@ declare interface IUpcStrings {
   StepRemoveGroups: string;
   StepCreateHandoverTasks: string;
 
-  // Transfer
   TabTransfer: string;
   TransferTitle: string;
   TransferIntro: string;
@@ -313,7 +297,6 @@ declare interface IUpcStrings {
   TransferRemoveLicensesLabel: string;
   TransferNoCurrentLicenses: string;
 
-  // Bulk import
   TabBulk: string;
   BulkTitle: string;
   BulkIntro: string;
@@ -338,7 +321,6 @@ declare interface IUpcStrings {
   BulkErrDuplicateUpn: string;
   BulkErrUnknownTemplate: string;
 
-  // Bulk offboarding
   TabBulkOffboard: string;
   BulkOffboardTitle: string;
   BulkOffboardIntro: string;
@@ -349,7 +331,6 @@ declare interface IUpcStrings {
   BulkErrUserNotFound: string;
   OffboardForwardingRequired: string;
 
-  // Service desk tasks
   TabTasks: string;
   TasksTitle: string;
   TasksEmptyTitle: string;
@@ -383,7 +364,6 @@ declare interface IUpcStrings {
   TaskTypeAccessReview: string;
   TaskTypeOther: string;
 
-  // Settings tab
   TabSettings: string;
   SettingsTitle: string;
   SettingsIntro: string;
@@ -395,7 +375,6 @@ declare interface IUpcStrings {
   SettingsSaveFailed: string;
   SettingsLoadError: string;
 
-  // Roles tab
   TabRoles: string;
   RolesTitle: string;
   RolesIntro: string;
@@ -439,11 +418,9 @@ declare interface IUpcStrings {
   SettingsRequiredApprovalsLabel: string;
   SettingsRequiredApprovalsHint: string;
 
-  // Dashboard truncation
   JobsTruncatedWarning: string;
   LoadMoreLabel: string;
 
-  // Dashboard visualizations
   DashboardOverviewTitle: string;
   DashboardJobsByStatus: string;
   DashboardJobsByType: string;
@@ -462,7 +439,6 @@ declare interface IUpcStrings {
   DashboardToday: string;
   DashboardDays: string;
 
-  // Audit trail
   AuditTitle: string;
   AuditEmpty: string;
   AuditColumnTimestamp: string;
@@ -475,7 +451,6 @@ declare interface IUpcStrings {
   AuditResultFailure: string;
   AuditResultSkipped: string;
 
-  // Copy-once dialog
   CredentialDialogTitle: string;
   CredentialDialogBodyPassword: string;
   CredentialDialogBodyTap: string;

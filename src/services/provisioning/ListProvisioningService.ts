@@ -154,8 +154,8 @@ export class ListProvisioningService {
       try {
         await list.fields.getByInternalNameOrTitle(name).update({ Indexed: true });
         created++;
-      } catch {
-        /* list already over the 5,000-item threshold can refuse a new index; skip and continue */
+      } catch (indexErr) {
+        void indexErr;
       }
     }
     return created;

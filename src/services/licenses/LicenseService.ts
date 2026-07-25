@@ -12,7 +12,6 @@ interface IGraphSubscribedSku {
   servicePlans: { servicePlanName: string; provisioningStatus: string }[];
 }
 
-/** Real subscribed SKUs; available = enabled − consumed (Phase 1 acceptance). */
 export class LicenseService {
   private readonly _graph: GraphService;
   private readonly _data: SharePointDataService;
@@ -42,7 +41,6 @@ export class LicenseService {
       }));
   }
 
-  /** SKUs joined with the manually maintained cost table (Graph has no pricing). */
   public async getLicenseOptions(signal?: AbortSignal): Promise<ILicenseOption[]> {
     const [skus, costs] = await Promise.all([
       this.getSubscribedSkus(signal),

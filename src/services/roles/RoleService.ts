@@ -83,8 +83,8 @@ export class RoleService {
         for (const id of result.value ?? []) {
           memberOf.add(id);
         }
-      } catch {
-        /* a failed chunk only hides UI affordances; continue with the rest */
+      } catch (chunkErr) {
+        void chunkErr;
       }
     }
 
@@ -110,8 +110,8 @@ export class RoleService {
       if (delegations.some((d) => isDelegationActive(d))) {
         permissions.add('approveJobs');
       }
-    } catch {
-      /* a failed delegation lookup only withholds the delegated capability */
+    } catch (delegationErr) {
+      void delegationErr;
     }
 
     return { roles, permissions, resolvedUtc: new Date().toISOString() };

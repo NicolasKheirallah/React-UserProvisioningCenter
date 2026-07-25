@@ -127,8 +127,7 @@ function guestPayload(): IOnboardingPayload {
       hireDate: '2026-08-01'
     },
     identity: {
-      // For a guest, "userPrincipalName" carries the invited external email
-      // address — Entra assigns the real #EXT# UPN on redemption.
+
       userPrincipalName: 'guest.partner@fabrikam.com',
       mailNickname: '',
       domain: '',
@@ -203,7 +202,7 @@ describe('onboarding: guest invite', () => {
     expect(job.status).toBe('Completed');
     expect(h.data.targetUserId).toBe('guest-123');
     expect(h.graph.calls.some((c) => c.method === 'POST' && c.path === '/invitations')).toBe(true);
-    // No cloud account creation, no license assignment, no credential hand-over.
+
     expect(h.graph.calls.some((c) => c.method === 'POST' && c.path === '/users')).toBe(false);
     expect(h.graph.calls.some((c) => c.method === 'POST' && c.path === '/users/guest-123/assignLicense')).toBe(
       false
@@ -230,7 +229,7 @@ describe('onboarding: guest invite', () => {
     });
 
     expect(job.status).toBe('Completed');
-    // Found by mail lookup — never re-invited.
+
     expect(h.data.targetUserId).toBe('guest-123');
     expect(invitationCalls).toBe(0);
   });

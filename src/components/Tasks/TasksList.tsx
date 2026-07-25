@@ -38,8 +38,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column'
   },
-  // Instructions are the payload here, so tasks render as content rows, not
-  // grid cells (Note fields do not truncate well in columns).
+
   task: {
     display: 'flex',
     alignItems: 'flex-start',
@@ -123,11 +122,6 @@ function taskTypeLabel(taskType: TaskType): string {
   }
 }
 
-/**
- * Service-desk queue (manageTasks permission): everything the engine could
- * not do through Graph lands here. Open tasks first; completing stamps who
- * and when.
- */
 export const TasksList: React.FC = () => {
   const styles = useStyles();
   const tasks = useTasks();

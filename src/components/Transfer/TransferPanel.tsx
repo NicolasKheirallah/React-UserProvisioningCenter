@@ -66,12 +66,6 @@ const useStyles = makeStyles({
   }
 });
 
-/**
- * Single-page Transfer form: department/job title/office/manager/license
- * changes for an EXISTING user. Deliberately not a multi-step wizard —
- * Transfer's scope (a handful of optional field changes) doesn't warrant one
- * the way onboarding's much larger, ordered field set does.
- */
 export const TransferPanel: React.FC<{ onSubmitted: () => void }> = ({ onSubmitted }) => {
   const styles = useStyles();
   const services = useServices();

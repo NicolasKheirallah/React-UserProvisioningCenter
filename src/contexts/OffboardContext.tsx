@@ -7,7 +7,6 @@ export interface IOffboardDraft {
   target: IOffboardingTarget | null;
   options: IOffboardingOptions;
   timingMode: OffboardTimingMode;
-  /** ISO date (yyyy-MM-dd); only meaningful when timingMode is 'scheduled'. */
   scheduledDate: string;
 }
 
@@ -74,7 +73,6 @@ export function offboardReducer(state: IOffboardState, action: OffboardAction): 
   }
 }
 
-/** True once a target is chosen or the operator advanced past step 1. */
 export function isOffboardDirty(state: IOffboardState): boolean {
   return state.step > 0 || state.draft.target !== null;
 }

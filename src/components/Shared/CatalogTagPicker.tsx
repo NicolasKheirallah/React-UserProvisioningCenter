@@ -29,7 +29,6 @@ const useStyles = makeStyles({
 export interface ICatalogTagPickerItem {
   id: string;
   title: string;
-  /** Shown as secondary text under the option and, truncated, on its chip. */
   description?: string;
 }
 
@@ -39,18 +38,10 @@ export interface ICatalogTagPickerProps {
   items: ICatalogTagPickerItem[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
-  /** Shown instead of the picker when the catalog itself has no entries. */
   emptyMessage: string;
-  /** Shown in the option list when a search matches nothing. */
   noMatchesMessage: string;
 }
 
-/**
- * Searchable, multi-select picker over an already-loaded catalog (Teams,
- * SharePoint sites, applications) — filters client-side since these lists
- * are small, curated SharePoint lists, not a live directory search. Same
- * chip UX as GroupTagPicker so every Access step section behaves the same way.
- */
 export const CatalogTagPicker: React.FC<ICatalogTagPickerProps> = ({
   label,
   hint,

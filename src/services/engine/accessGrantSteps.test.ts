@@ -281,8 +281,6 @@ describe('onboarding: access-grant steps', () => {
       presentCredentials: async () => undefined
     });
 
-    // Each access-grant step catches its own per-item failures and hands them
-    // off as a task rather than throwing — the step itself still completes.
     expect(job.status).toBe('Completed');
     expect(h.graph.calls.some((c) => c.method === 'POST' && c.path === '/groups/grp-sec-1/members/$ref')).toBe(
       true
@@ -291,13 +289,13 @@ describe('onboarding: access-grant steps', () => {
       true
     );
     expect(h.graph.calls.some((c) => c.method === 'POST' && c.path === '/teams/team-1/members')).toBe(true);
-    // One SharePoint site succeeded, one failed — both went through SiteAccessService.
+
     expect(h.siteAccessCalls.map((c) => c.siteUrl)).toEqual([
       'https://contoso.sharepoint.com/sites/it-ok',
       'https://contoso.sharepoint.com/sites/it-fail'
     ]);
     expect(h.data.tasks.some((t) => t.taskType === 'SharePointAccess')).toBe(true);
-    // Group-based app joined the target group; the manual app produced a task.
+
     expect(
       h.graph.calls.some((c) => c.method === 'POST' && c.path === '/groups/grp-app-target/members/$ref')
     ).toBe(true);

@@ -17,14 +17,9 @@ export interface IConfirmDialogProps {
   cancelLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
-  /** Disables the confirm button (prevents double-click while action is in-flight). */
   confirmDisabled?: boolean;
 }
 
-/**
- * Confirmation gate for irreversible actions (cancel job, discard draft).
- * modalType="alert" so Escape/backdrop cannot bypass the explicit choice.
- */
 export const ConfirmDialog: React.FC<IConfirmDialogProps> = (props) => (
   <Dialog
     modalType="alert"

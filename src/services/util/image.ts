@@ -1,12 +1,5 @@
-/** Data URL length cap matching IPersonalInfo.photoDataUrl's ~50KB budget (base64 is ~1.37x binary size). */
 export const MAX_PHOTO_DATA_URL_LENGTH: number = 70_000;
 
-/**
- * Downscales an image file to a square-ish thumbnail and re-encodes it as a
- * JPEG data URL, so a multi-megabyte camera photo doesn't blow up the job's
- * PayloadJson (a SharePoint Note field). Throws if the result is still over
- * MAX_PHOTO_DATA_URL_LENGTH after compression (e.g. a very busy/noisy image).
- */
 export async function resizeImageToDataUrl(
   file: File,
   maxDimension: number = 200,

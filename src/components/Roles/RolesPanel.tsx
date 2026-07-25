@@ -188,12 +188,6 @@ const RoleCard: React.FC<IRoleCardProps> = ({ item, onSaved }) => {
   );
 };
 
-/**
- * Maps each AppRole to an Entra security group (MemberGroupId) and the UI
- * permission verbs it grants (manageSettings-gated — see App.tsx). Purely
- * UI-visibility config: effective Graph access always follows the operator's
- * own directory role (spec Section 1), never what's edited here.
- */
 export const RolesPanel: React.FC = () => {
   const styles = useStyles();
   const query = useRoleDefinitionsForManagement();

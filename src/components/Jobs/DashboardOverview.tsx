@@ -44,7 +44,6 @@ const useStyles = makeStyles({
     rowGap: tokens.spacingVerticalL
   },
 
-  // ---- KPI cards ----
   kpiRow: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
@@ -75,8 +74,7 @@ const useStyles = makeStyles({
     ...shorthands.border(tokens.strokeWidthThick, 'solid', tokens.colorBrandStroke1),
     backgroundColor: tokens.colorBrandBackground2
   },
-  // The KPI cards are native <button> elements (for aria-pressed semantics);
-  // these replace what used to be a per-render inline style object.
+
   kpiCardButtonBase: {
     textAlign: 'left',
     fontFamily: 'inherit'
@@ -134,7 +132,6 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase200
   },
 
-  // ---- Chart cards ----
   chartsRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
@@ -167,7 +164,6 @@ const useStyles = makeStyles({
     height: '300px'
   },
 
-  // ---- Donut center label ----
   donutWrap: {
     position: 'relative',
     width: '100%',
@@ -195,7 +191,6 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3
   },
 
-  // ---- Summary stats ----
   statsRow: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -270,19 +265,6 @@ const ChartDataTable: React.FC<IChartTableProps> = ({ caption, columns, rows }) 
 const WEEK_MS: number = 7 * 24 * 60 * 60 * 1000;
 const DAY_MS: number = 24 * 60 * 60 * 1000;
 
-// Sourced from Fluent's palette tokens (not the neutral/brand ramp used for
-// UI chrome elsewhere in this file) so chart series adapt to dark/high
-// contrast host themes instead of staying fixed hex values.
-//
-// This trio mirrors the exact foreground colors Fluent's own Badge component
-// uses for its outline/ghost "warning → severe → danger" severity ramp
-// (see @fluentui/react-badge's useBadgeStyles), so a chart color always
-// means the same thing as the equivalent status Badge elsewhere in the app:
-//   PendingApproval — Marigold  #d39300 (Badge warning)
-//   PartiallyFailed — DarkOrange #da3b01 (Badge severe)
-//   Failed          — Red       #d13438 (Badge danger)
-// Picked over the *Background3-paired Foreground1 shades (Yellow #817400,
-// Red #bc2f32) that read as muddy olive/brick on a white chart background.
 const STATUS_COLORS: Record<JobStatus, string> = {
   Draft: tokens.colorNeutralForeground3,
   PendingApproval: tokens.colorPaletteMarigoldForeground1,
@@ -302,8 +284,6 @@ const TYPE_COLORS: Record<JobType, string> = {
   Clone: tokens.colorPaletteGreenForeground1,
   Bulk: tokens.colorPaletteMarigoldForeground1
 };
-
-// ---- Custom tooltip (Fluent 2 styled) ----
 
 interface ITooltipPayloadItem {
   name: string;
@@ -360,8 +340,6 @@ function FluentTooltip({
   );
 }
 
-// ---- Derived data types ----
-
 interface IStatusDatum {
   name: string;
   value: number;
@@ -416,11 +394,6 @@ const STATUS_ORDER: JobStatus[] = [
 
 const ALL_JOB_TYPES: JobType[] = ['Onboard', 'Offboard', 'Transfer', 'Clone', 'Bulk'];
 
-/**
- * Single-pass computation of all dashboard derived data: KPI counts, status
- * breakdown, type breakdown, and 7-day trend. Memoized so re-renders triggered
- * by polling don't re-compute when the jobs array reference hasn't changed.
- */
 function computeSummary(jobs: IJobSummary[], now: number): IKpiSummary {
   const statusCounts: Map<JobStatus, number> = new Map();
   const typeCounts: Map<JobType, number> = new Map();
@@ -433,7 +406,6 @@ function computeSummary(jobs: IJobSummary[], now: number): IKpiSummary {
   let onboardCount = 0;
   let offboardCount = 0;
 
-  // Trend buckets: 7 days, index 0 = oldest, index 6 = today.
   const trend: ITrendDay[] = [];
   for (let i = 6; i >= 0; i--) {
     const dayStart: number = now - i * DAY_MS;
@@ -547,34 +519,15 @@ export type KpiFilterKey = 'pending' | 'running' | 'failed7' | 'completedToday' 
 
 export interface IDashboardOverviewProps {
   jobs: IJobSummary[];
-  /** Active KPI filter (tiles double as filters, matching the old dashboard). */
   activeKpi?: KpiFilterKey;
-  /** Called when a KPI card is clicked. */
   onKpiClick?: (key: KpiFilterKey) => void;
 }
 
-/**
- * Dashboard overview with Recharts visualizations:
- *   - KPI cards (Fluent 2 elevation + hover lift + click-to-filter)
- *   - Donut chart with center total: jobs by status
- *   - Horizontal bar chart: jobs by type
- *   - Stacked area chart: 7-day activity trend by status
- *   - Summary stats (success rate, onboarding/offboarding counts)
- *
- * All derived data is computed in a single pass over the jobs array and
- * memoized so re-renders from polling don't re-compute.
- */
 export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, activeKpi, onKpiClick }) => {
   const styles = useStyles();
 
-  // Single-pass memoized computation — re-computes only when jobs array
-  // reference changes. `now` is deliberately excluded (it would bust the memo
-  // on every render/poll); time-window KPIs drift by at most one poll cycle.
   const summary: IKpiSummary = React.useMemo(() => computeSummary(jobs, Date.now()), [jobs]);
 
-  // Charts replay their full entrance animation whenever recharts sees new
-  // data — including every live-job poll tick, which is exactly when an
-  // operator is most likely watching. Animate once on first paint only.
   const hasRenderedOnce = React.useRef(false);
   React.useEffect(() => {
     hasRenderedOnce.current = true;
@@ -626,7 +579,7 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
 
   return (
     <div className={styles.root} role="region" aria-label={strings.DashboardOverviewTitle}>
-      {/* ---- KPI cards (click-through filters) ---- */}
+      {}
       <div className={styles.kpiRow}>
         {kpiCards.map((card) => {
           const isActive: boolean = activeKpi === card.key;
@@ -655,9 +608,9 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
         })}
       </div>
 
-      {/* ---- Charts row ---- */}
+      {}
       <div className={styles.chartsRow}>
-        {/* Status donut with center total */}
+        {}
         <div className={styles.chartCard}>
           <Text className={styles.chartTitle}>{strings.DashboardJobsByStatus}</Text>
           {summary.statusData.length > 0 ? (
@@ -707,7 +660,7 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
           )}
         </div>
 
-        {/* Type breakdown */}
+        {}
         <div className={styles.chartCard}>
           <Text className={styles.chartTitle}>{strings.DashboardJobsByType}</Text>
           {summary.typeData.length > 0 ? (
@@ -758,7 +711,7 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
         </div>
       </div>
 
-      {/* ---- 7-day trend (full width) ---- */}
+      {}
       <div className={styles.chartCard}>
         <Text className={styles.chartTitle}>{strings.DashboardTrend7Days}</Text>
         {summary.hasTrend ? (
@@ -868,7 +821,7 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
         )}
       </div>
 
-      {/* ---- Summary stats ---- */}
+      {}
       <div className={styles.chartCard}>
         <Text className={styles.chartTitle}>{strings.DashboardOverviewTitle}</Text>
         <div className={styles.statsRow}>

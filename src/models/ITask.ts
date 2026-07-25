@@ -1,7 +1,3 @@
-/**
- * UPC_Tasks — the landing place for every operation Graph cannot perform
- * (spec Section 10). Categories mirror that table.
- */
 export type TaskType =
   | 'MailboxConvertShared'
   | 'MailboxDelegation'

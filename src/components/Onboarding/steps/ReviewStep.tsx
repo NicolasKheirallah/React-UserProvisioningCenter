@@ -59,7 +59,6 @@ const useStyles = makeStyles({
 
 interface IReviewSection {
   title: string;
-  /** Wizard step index this section's Edit link jumps to. */
   step: number;
   rows: [string, string][];
 }
@@ -68,11 +67,6 @@ export interface IReviewStepProps {
   onSubmitted: () => void;
 }
 
-/**
- * Wizard step 6 — Review & submit. Grouped by wizard step with per-section
- * Edit links (admin center review pattern). Creates a PendingApproval job —
- * never runs anything.
- */
 export const ReviewStep: React.FC<IReviewStepProps> = ({ onSubmitted }) => {
   const styles = useStyles();
   const { state, dispatch } = useWizard();

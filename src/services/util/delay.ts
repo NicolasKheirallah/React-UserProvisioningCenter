@@ -1,6 +1,5 @@
 import { RequestAbortedError } from '../graph/GraphError';
 
-/** Abortable sleep used by retry backoff and the mailbox polling loop. */
 export function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {

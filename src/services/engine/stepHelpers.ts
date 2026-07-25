@@ -5,15 +5,10 @@ import type { IJobPayload } from '../../models';
 
 export { delay } from '../util/delay';
 
-/** Every payload kind names its target differently — normalize for audit entries. */
 export function targetUserOf(payload: IJobPayload): string {
   return payload.kind === 'transfer' ? payload.target.userPrincipalName : payload.identity?.userPrincipalName ?? '';
 }
 
-/**
- * Wraps a Graph write so it produces exactly one audit entry, success or
- * failure (spec Section 4), then rethrows failures as StepFailure.
- */
 export async function auditedGraphWrite<T>(
   ctx: IStepContext,
   action: string,
@@ -60,7 +55,6 @@ export async function auditedGraphWrite<T>(
   }
 }
 
-/** 404-tolerant read helper. */
 export async function getOrNull<T>(read: () => Promise<T>): Promise<T | null> {
   try {
     return await read();
@@ -72,7 +66,6 @@ export async function getOrNull<T>(read: () => Promise<T>): Promise<T | null> {
   }
 }
 
-/** Shared final step for both pipelines — records whether any step failed. */
 export async function runFinalizeAudit(ctx: IStepContext): Promise<void> {
   const failed: string[] = ctx.job.steps.filter((s) => s.status === 'failed').map((s) => s.stepId);
   await ctx.audit.log({

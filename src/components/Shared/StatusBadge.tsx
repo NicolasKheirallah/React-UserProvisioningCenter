@@ -25,7 +25,6 @@ const STEP_STATUS_META: Record<StepStatus, { color: BadgeColor; label: () => str
   skipped: { color: 'informative', label: () => strings.StepStatusSkipped }
 };
 
-/** Localized display label for a job status (badges, live announcements). */
 export function jobStatusLabel(status: JobStatus): string {
   return (JOB_STATUS_META[status] ?? JOB_STATUS_META.Draft).label();
 }
@@ -48,7 +47,6 @@ export const StepStatusBadge: React.FC<{ status: StepStatus }> = ({ status }) =>
   );
 };
 
-/** Localized display label for a job type. */
 const JOB_TYPE_LABELS: Record<JobType, () => string> = {
   Onboard: () => strings.JobTypeOnboard,
   Offboard: () => strings.JobTypeOffboard,

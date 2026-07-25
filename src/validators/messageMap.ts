@@ -1,6 +1,5 @@
 import * as strings from 'UpcStrings';
 
-/** Maps Yup schema message keys to localized text. */
 export function vmsg(key: string | undefined): string | undefined {
   switch (key) {
     case undefined:

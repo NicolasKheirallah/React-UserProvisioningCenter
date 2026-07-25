@@ -1,4 +1,3 @@
-/** RFC 4122 v4 GUID from crypto randomness (no SPFx dependency, jest-safe). */
 export function newGuid(): string {
   const cryptoObj: Crypto = crypto;
   if (typeof cryptoObj.randomUUID === 'function') {

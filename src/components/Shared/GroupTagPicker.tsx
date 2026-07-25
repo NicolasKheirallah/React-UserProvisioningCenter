@@ -34,16 +34,6 @@ export interface IGroupTagPickerProps {
   onChange: (ids: string[]) => void;
 }
 
-/**
- * Searchable, multi-select Entra group picker (live directory search by
- * display name, chips for what's selected) — the group-picker equivalent of
- * the manager/target-user Comboboxes used elsewhere in the wizard, so an HR
- * operator never has to paste a raw Entra object id.
- *
- * Selected ids may arrive from outside this session (a saved template) with
- * no display name attached; those are resolved once via getGroupsByIds so
- * their chips never show a bare GUID.
- */
 export const GroupTagPicker: React.FC<IGroupTagPickerProps> = ({
   label,
   hint,
@@ -76,8 +66,6 @@ export const GroupTagPicker: React.FC<IGroupTagPickerProps> = ({
     });
   }, [results.data]);
 
-  // One-time resolve for ids this picker didn't discover through search
-  // itself (e.g. seeded from a template's already-saved group ids).
   const resolvedRef = React.useRef<Set<string>>(new Set());
   React.useEffect(() => {
     const unresolved: string[] = selectedIds.filter(

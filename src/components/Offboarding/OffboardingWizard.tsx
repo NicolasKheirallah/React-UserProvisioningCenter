@@ -105,8 +105,6 @@ const useStyles = makeStyles({
   }
 });
 
-// ---- Step 1: select user -----------------------------------------------------
-
 const TargetStep: React.FC = () => {
   const styles = useStyles();
   const services = useServices();
@@ -187,8 +185,6 @@ const TargetStep: React.FC = () => {
     </div>
   );
 };
-
-// ---- Step 2: access removal ----------------------------------------------------
 
 const AccessStep: React.FC = () => {
   const styles = useStyles();
@@ -288,8 +284,6 @@ const AccessStep: React.FC = () => {
   );
 };
 
-// ---- Step 3: timing --------------------------------------------------------------
-
 const TimingStep: React.FC = () => {
   const styles = useStyles();
   const { state, dispatch } = useOffboard();
@@ -335,8 +329,6 @@ const TimingStep: React.FC = () => {
     </div>
   );
 };
-
-// ---- Step 4: review ---------------------------------------------------------------
 
 const ReviewOffboardStep: React.FC<{ onSubmitted: () => void }> = ({ onSubmitted }) => {
   const styles = useStyles();
@@ -398,8 +390,7 @@ const ReviewOffboardStep: React.FC<{ onSubmitted: () => void }> = ({ onSubmitted
     setSubmitting(true);
     setError(undefined);
     const upn: string = target.userPrincipalName;
-    // Handle guest accounts (UPN contains #EXT#): use the original email
-    // before the #EXT# marker as the mailNickname, not the full guest UPN.
+
     const extMarker: number = upn.indexOf('#EXT#');
     const cleanUpn: string = extMarker > 0 ? upn.slice(0, extMarker) : upn;
     const at: number = cleanUpn.lastIndexOf('@');
@@ -496,14 +487,10 @@ const ReviewOffboardStep: React.FC<{ onSubmitted: () => void }> = ({ onSubmitted
   );
 };
 
-// ---- Wizard shell -------------------------------------------------------------------
-
 export interface IOffboardingWizardProps {
   onSubmitted: () => void;
 }
 
-// Static localized labels — computed once rather than reallocated on every
-// render (this component re-renders on every offboard-draft change).
 const STEP_LABELS: string[] = [
   strings.OffboardStepTarget,
   strings.OffboardStepAccess,
@@ -511,11 +498,6 @@ const STEP_LABELS: string[] = [
   strings.WizardStepReview
 ];
 
-/**
- * Offboarding wizard: select user → access removal → timing → review. Creates
- * a PendingApproval 'Offboard' job that flows through the same approval, run
- * and audit pipeline as onboarding.
- */
 export const OffboardingWizard: React.FC<IOffboardingWizardProps> = ({ onSubmitted }) => {
   const styles = useStyles();
   const { state, dispatch } = useOffboard();
@@ -551,8 +533,7 @@ export const OffboardingWizard: React.FC<IOffboardingWizardProps> = ({ onSubmitt
       <div className={styles.body}>
         <WizardStepper labels={STEP_LABELS} current={state.step} onStepClick={onStepClick} />
         <div className={styles.content}>
-          {/* Keyed on the step index so a crash in one step's render doesn't
-              blank the whole wizard, and navigating away recovers it. */}
+          {}
           <AppErrorBoundary key={state.step} onError={onStepRenderError}>
             {state.step === 0 ? <TargetStep /> : undefined}
             {state.step === 1 ? <AccessStep /> : undefined}

@@ -20,7 +20,7 @@ const useStyles = makeStyles({
       width: '100%'
     }
   },
-  // Full rail: ≥561px container width.
+
   list: {
     display: 'flex',
     flexDirection: 'column',
@@ -32,7 +32,7 @@ const useStyles = makeStyles({
       display: 'none'
     }
   },
-  // Compact strip: ≤560px container width.
+
   compact: {
     display: 'none',
     '@container (max-width: 560px)': {
@@ -113,21 +113,10 @@ const useStyles = makeStyles({
 export interface IWizardStepperProps {
   labels: string[];
   current: number;
-  /** Only completed (earlier) steps are navigable. */
   onStepClick: (step: number) => void;
-  /** Completed steps whose data no longer passes validation (e.g. a later
-   *  template apply changed an earlier step's fields) — shown with a warning
-   *  indicator instead of a checkmark so the operator notices before Review. */
   errorSteps?: ReadonlySet<number>;
 }
 
-/**
- * Numbered step rail in the Microsoft 365 admin center wizard style:
- * completed steps show a filled brand checkmark and are clickable, the
- * current step is a filled brand circle, upcoming steps are neutral.
- * In narrow containers (one-third sections, Teams mobile) the rail collapses
- * to a "Step n of m" strip with a progress bar.
- */
 export const WizardStepper: React.FC<IWizardStepperProps> = React.memo(function WizardStepper({
   labels,
   current,
@@ -158,9 +147,7 @@ export const WizardStepper: React.FC<IWizardStepperProps> = React.memo(function 
               ? `${label} (${strings.WizardStepCompletedAria})`
               : label;
           return (
-            // Index is a stable, order-guaranteed key here: the step list is
-            // a fixed, static array (unlike data-driven lists elsewhere in
-            // the app), so this is the one place index-as-key is correct.
+
             <li key={index}>
               {index > 0 ? <div className={styles.connector} aria-hidden="true" /> : undefined}
               <button

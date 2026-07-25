@@ -7,13 +7,6 @@ const EMAIL: RegExp = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SITE_ROLES: readonly string[] = ['visitor', 'member', 'owner'];
 const TEAM_ROLES: readonly string[] = ['member', 'owner'];
 
-/**
- * Service-layer validation of a job payload (spec Section 8: validate all
- * wizard input in the service layer, not only in form validation).
- * Pure and synchronous so the workflow engine and unit tests can use it;
- * directory-dependent checks (duplicate employeeId, UPN collisions) are
- * re-run by the validate-input step against Graph.
- */
 export function validatePayload(payload: IOnboardingPayload): string[] {
   const errors: string[] = [];
 
@@ -48,10 +41,7 @@ export function validatePayload(payload: IOnboardingPayload): string[] {
   const isGuest: boolean = identity?.accountType === 'guest';
 
   if (isGuest) {
-    // A guest's userPrincipalName holds the external email address the
-    // invitation is sent to — validate it as an email, not the stricter
-    // tenant-UPN-local shape (external emails can contain characters the
-    // UPN_LOCAL pattern would reject).
+
     if (!EMAIL.test(identity?.userPrincipalName ?? '')) {
       errors.push('identity.userPrincipalName: must be a valid email address for a guest invite');
     }

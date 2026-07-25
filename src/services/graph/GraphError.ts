@@ -54,8 +54,8 @@ export function toGraphServiceError(err: unknown): GraphServiceError {
       const parsed: { error?: { code?: string; message?: string } } = JSON.parse(raw.body);
       code = parsed.error?.code ?? code;
       message = parsed.error?.message ?? message;
-    } catch {
-      /* not JSON */
+    } catch (parseErr) {
+      void parseErr;
     }
   }
   let retryAfter: number | undefined;

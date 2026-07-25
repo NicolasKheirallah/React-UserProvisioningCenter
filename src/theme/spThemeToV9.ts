@@ -1,22 +1,5 @@
 import type { Theme } from '@fluentui/react-components';
 
-/**
- * Converts a SharePoint (Fluent v8-style) section theme into a Fluent v9
- * `Theme` object. Inlined from `@fluentui/react-migration-v8-v9`'s theme
- * shim (MIT, microsoft/fluentui) rather than depending on that package —
- * the package itself is a thin wrapper around this exact mapping, but pulls
- * in the entire `@fluentui/react` v8 tree (`@fluentui/react`,
- * `@fluentui/fluent2-theme`, `@fluentui/react-hooks`, `@ctrl/tinycolor`, …)
- * as hard dependencies just to reach it. Copying the mapping keeps this
- * solution's own code on Fluent v9 only.
- *
- * (SPFx itself still ships @fluentui/react v8 internally — the property
- * pane and command surfaces are built on it — so it remains in node_modules
- * as a transitive SPFx dependency regardless. This only removes it from
- * *our* dependency graph and from anything our own source imports.)
- */
-
-/** The subset of Fluent v8's IPalette this mapping reads. */
 export interface ISpThemePalette {
   themePrimary: string;
   themeLighterAlt: string;
@@ -42,7 +25,6 @@ export interface ISpThemePalette {
   black: string;
 }
 
-/** The subset of Fluent v8's IEffects this mapping reads. */
 export interface ISpThemeEffects {
   elevation4: string;
   elevation8: string;
@@ -53,11 +35,6 @@ export interface ISpThemeEffects {
   roundedCorner6: string;
 }
 
-// Grey/alpha ramps duplicated from Fluent's react-theme package (not
-// exported from there either — react-migration-v8-v9 duplicates the same
-// values under the same name for the same reason). Full ramp kept (not just
-// the keys this file happens to read today) so the mapping below is a exact,
-// unmodified transcription of the original rather than an approximation.
 const grey: Record<number, string> = {
   0: '#000000',
   2: '#050505',
@@ -367,7 +344,6 @@ function mapBorderRadiusTokens(effects: ISpThemeEffects): Partial<Theme> {
   } as Partial<Theme>;
 }
 
-/** Creates a Fluent v9 Theme from a SharePoint (v8-style) section theme, layered over a base v9 theme. */
 export function createV9ThemeFromSp(
   palette: ISpThemePalette,
   effects: ISpThemeEffects,

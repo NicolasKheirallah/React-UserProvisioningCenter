@@ -49,11 +49,6 @@ function clamp(value: number, min: number, max: number, fallback: number): numbe
   return Math.min(Math.max(Math.round(value), min), max);
 }
 
-/**
- * Tenant-shared settings (manageSettings permission), stored in UPC_Settings
- * so they apply to every page and every operator — unlike web part
- * properties, page editors cannot change them.
- */
 export const SettingsPanel: React.FC = () => {
   const styles = useStyles();
   const services = useServices();
@@ -68,13 +63,9 @@ export const SettingsPanel: React.FC = () => {
   const [draft, setDraft] = React.useState<IAppSettings>(persisted);
   const [saving, setSaving] = React.useState<boolean>(false);
   const [saveError, setSaveError] = React.useState<boolean>(false);
-  // Track whether the operator has started editing. Only re-seed from the
-  // server when they have NOT started editing — prevents concurrent admins
-  // from silently overwriting each other's in-progress edits.
+
   const userEditing = React.useRef(false);
 
-  // Re-seed the form when fresh values arrive (initial load), but only if the
-  // operator hasn't started editing yet.
   React.useEffect(() => {
     if (!userEditing.current) {
       setDraft(persisted);
@@ -83,8 +74,6 @@ export const SettingsPanel: React.FC = () => {
 
   const dirty: boolean = JSON.stringify(draft) !== JSON.stringify(persisted);
 
-  // Wrap setDraft so any user edit marks the form as "user is editing" —
-  // prevents server refetches from clobbering in-progress edits.
   const updateDraft = React.useCallback((next: IAppSettings): void => {
     userEditing.current = true;
     setDraft(next);

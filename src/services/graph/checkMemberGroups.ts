@@ -23,8 +23,8 @@ export async function checkMemberGroups(
       for (const id of result.value ?? []) {
         memberOf.add(id);
       }
-    } catch {
-      /* a failed chunk hides that subset from the result; caller retries the whole write anyway */
+    } catch (chunkErr) {
+      void chunkErr;
     }
   }
   return memberOf;

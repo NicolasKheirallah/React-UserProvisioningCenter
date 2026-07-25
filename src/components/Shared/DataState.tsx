@@ -37,16 +37,11 @@ export interface IDataStateProps {
   isEmpty?: boolean;
   emptyTitle?: string;
   emptyBody?: string;
-  /** Optional call to action rendered under the empty-state text. */
   emptyAction?: React.ReactNode;
   onRetry?: () => void;
   children?: React.ReactNode;
 }
 
-/**
- * Standard four-state wrapper (spec Section 3): Loading (Skeleton),
- * Error (actionable + correlation id), Empty (instructional), Data.
- */
 export const DataState: React.FC<IDataStateProps> = (props) => {
   const styles = useStyles();
 

@@ -30,8 +30,8 @@ describe('jobStateMachine', () => {
     expect(canStartJob('Completed')).toBe(false);
     expect(canStartJob('Approved')).toBe(true);
     expect(canStartJob('Scheduled')).toBe(true);
-    expect(canStartJob('Running')).toBe(true); // resume after tab close
-    expect(canStartJob('PartiallyFailed')).toBe(true); // manual retry
+    expect(canStartJob('Running')).toBe(true);
+    expect(canStartJob('PartiallyFailed')).toBe(true);
     expect(canStartJob('Failed')).toBe(true);
   });
 

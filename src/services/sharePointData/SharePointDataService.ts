@@ -274,8 +274,6 @@ export class SharePointDataService {
     );
   }
 
-  // ---- Jobs ------------------------------------------------------------------
-
   public async getJobs(top: number = SharePointDataService.DEFAULT_JOBS_TOP): Promise<IProvisioningJob[]> {
     const page = await this.getJobsPaged(top);
     return page.items;
@@ -511,8 +509,6 @@ export class SharePointDataService {
     );
   }
 
-  // ---- Audit -------------------------------------------------------------------
-
   public async addAuditEntry(entry: IAuditEntry): Promise<void> {
     await sharePointRetry(
       () =>
@@ -588,8 +584,6 @@ export class SharePointDataService {
     }));
   }
 
-  // ---- Roles ---------------------------------------------------------------
-
   public async getRoleDefinitions(): Promise<IRoleDefinition[]> {
     const items: { Title: AppRole; MemberGroupId: string; PermissionsJson: string | null }[] = await sharePointRetry(
       () => this._sp.web.lists.getByTitle(LIST_ROLES).items.select('Title', 'MemberGroupId', 'PermissionsJson').top(50)(),
@@ -641,8 +635,6 @@ export class SharePointDataService {
       { circuitKey: LIST_ROLES }
     );
   }
-
-  // ---- Approval delegation ---------------------------------------------------
 
   public async getActiveDelegationsFor(delegateUpn: string): Promise<IApprovalDelegation[]> {
     const literal: string = escapeODataLiteral(delegateUpn);
@@ -696,8 +688,6 @@ export class SharePointDataService {
       { circuitKey: LIST_APPROVAL_DELEGATIONS }
     );
   }
-
-  // ---- Reference data ----------------------------------------------------------
 
   public async getLicenseCosts(): Promise<ILicenseCost[]> {
     const items: { Title: string; MonthlyCost: number; Currency: string }[] = await sharePointRetry(
@@ -813,8 +803,8 @@ export class SharePointDataService {
           isActive: i.IsActive,
           version: i.Version
         });
-      } catch {
-        /* skipped: malformed TemplateJson */
+      } catch (parseErr) {
+        void parseErr;
       }
     }
     return templates;
@@ -886,8 +876,6 @@ export class SharePointDataService {
     );
   }
 
-  // ---- Settings ----------------------------------------------------------------
-
   public async getAppSettings(): Promise<Partial<IAppSettings>> {
     const items: { Id: number; SettingsJson: string | null }[] = await sharePointRetry(
       () => this._sp.web.lists.getByTitle(LIST_SETTINGS).items.select('Id', 'SettingsJson').filter("Title eq 'app'").top(1)(),
@@ -919,8 +907,6 @@ export class SharePointDataService {
       { circuitKey: LIST_SETTINGS }
     );
   }
-
-  // ---- Tasks ---------------------------------------------------------------------
 
   public async getTasks(top: number = 500): Promise<IServiceDeskTask[]> {
     const page = await this.getTasksPaged(top);

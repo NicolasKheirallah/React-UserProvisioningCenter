@@ -82,19 +82,10 @@ const EMPTY_TEMPLATE: IDepartmentTemplate = {
 
 export interface ITemplateEditorDrawerProps {
   open: boolean;
-  /** null = create a new template. */
   item: ITemplateListItem | null;
   onClose: () => void;
 }
 
-/**
- * Template create/edit surface. Edits every field the wizard's applyTemplate
- * consumes: department, default usage location, licenses, security/M365
- * groups (live Entra directory search), Teams/site/application catalog
- * selections (searchable, per-grant role where relevant), the approver
- * group (optional — see IDepartmentTemplate.approverGroupId), and the
- * access review window.
- */
 export const TemplateEditorDrawer: React.FC<ITemplateEditorDrawerProps> = ({
   open,
   item,

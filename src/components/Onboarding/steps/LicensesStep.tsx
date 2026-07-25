@@ -28,8 +28,7 @@ const useStyles = makeStyles({
     borderRadius: tokens.borderRadiusMedium
   },
   table: {
-    // Fixed layout so long SKU names truncate instead of colliding with the
-    // neighbouring columns.
+
     tableLayout: 'fixed',
     width: '100%'
   },
@@ -68,12 +67,6 @@ function costLabel(option: ILicenseOption): string {
   return `${option.monthlyCost.toFixed(2)} ${option.currency ?? ''}`.trim();
 }
 
-/**
- * Wizard step 5 — Licenses. Lists real subscribed SKUs with
- * available = enabled − consumed, disables exhausted SKUs and shows monthly
- * cost from UPC_LicenseCostTable (Phase 1 acceptance). Rows toggle on click;
- * the checkbox remains the accessible control.
- */
 export const LicensesStep: React.FC = () => {
   const styles = useStyles();
   const { state, dispatch } = useWizard();

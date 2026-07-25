@@ -181,7 +181,6 @@ function makeHarness(status: JobStatus): IHarness {
   return { engine, graph, data };
 }
 
-/** Handlers for the full onboarding pipeline plus the clone-specific source lookups. */
 function happyPathHandlers(graph: MockGraph, options?: { sourceLicenses?: string[]; sourceMissing?: boolean }): void {
   graph.handlers = {
     'GET /users?$select=id&$filter=': () => ({ value: [] }),
@@ -218,8 +217,7 @@ describe('clone: end-to-end pipeline', () => {
 
     expect(job.status).toBe('Completed');
     expect(h.data.targetUserId).toBe('user-123');
-    // Source has sku-1 (already assigned via the template) and sku-2 (clone-only) —
-    // only the net-new one should be copied.
+
     const copyLicenseCall = h.graph.calls.filter(
       (c) => c.method === 'POST' && c.path === '/users/user-123/assignLicense'
     );
@@ -245,7 +243,7 @@ describe('clone: end-to-end pipeline', () => {
     const sourceStep: IJobStep = h.data.steps().filter((s) => s.stepId === 'validate-clone-source')[0];
     expect(sourceStep.status).toBe('failed');
     expect(sourceStep.lastError?.graphCode).toBe('UPC_TargetNotFound');
-    // The new user was still created before clone-source validation runs.
+
     expect(h.graph.countCalls('POST', '/users')).toBeGreaterThanOrEqual(1);
   });
 });

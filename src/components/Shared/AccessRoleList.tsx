@@ -45,12 +45,6 @@ export interface IAccessRoleListProps<TRole extends string> {
   onRoleChange: (id: string, role: TRole) => void;
 }
 
-/**
- * Compact per-selection role editor rendered under a CatalogTagPicker — one
- * row per item picked, each with its own role Dropdown. Split out of
- * AccessStep so TemplateEditorDrawer's Teams/SharePoint sites sections can
- * offer the same per-grant role control instead of a single fixed role.
- */
 export function AccessRoleList<TRole extends string>({
   items,
   roleOptions,

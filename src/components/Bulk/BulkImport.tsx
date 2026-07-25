@@ -87,7 +87,6 @@ interface IBulkRow {
   index: number;
   data: Record<string, string>;
   errors: string[];
-  /** Resolved by directory validation. */
   upn?: string;
   mailNickname?: string;
   licenseSelections: ILicenseSelection[];
@@ -99,16 +98,6 @@ export interface IBulkImportProps {
   onSubmitted: () => void;
 }
 
-/**
- * Bulk onboarding import: CSV upload → per-row validation (schema, duplicate
- * employee IDs, sign-in name resolution against the directory) → one Onboard
- * job per valid row through the normal approval pipeline. An optional
- * `template` column names an active department template (exact title match)
- * whose access grants (security/M365 groups, Teams, sites, applications) and
- * access-review window are applied to that row — the row's own required
- * columns (department, usageLocation, licenses) always win over the
- * template, which only fills in what a CSV row can't carry directly.
- */
 export const BulkImport: React.FC<IBulkImportProps> = ({ onSubmitted }) => {
   const styles = useStyles();
   const services = useServices();
@@ -256,15 +245,9 @@ export const BulkImport: React.FC<IBulkImportProps> = ({ onSubmitted }) => {
     const seenUpns: Set<string> = new Set();
     const next: IBulkRow[] = rows.map((r) => ({ ...r, errors: [], upn: undefined }));
 
-    // Concurrent validation with limited concurrency. In-file duplicate
-    // detection (seenEmployeeIds, seenUpns) runs in the synchronous local
-    // check before any await, so the check-then-add is atomic within a single
-    // JS execution frame. The UPN double-check after the await catches any
-    // race where two workers resolved the same UPN simultaneously.
     const CONCURRENCY: number = 5;
     let done: number = 0;
-    // We run local (synchronous) checks first in a single pass, then fire
-    // directory checks with limited concurrency on the rows that passed.
+
     const queue: Array<{ row: IBulkRow }> = next.map((row) => ({ row }));
 
     const worker = async (): Promise<void> => {
@@ -299,8 +282,7 @@ export const BulkImport: React.FC<IBulkImportProps> = ({ onSubmitted }) => {
                 row.errors.push(strings.BulkErrNoUpn);
               } else {
                 const upn: string = `${naming.chosen}@${row.data.domain}`;
-                // Double-check the Set after the await — another worker may
-                // have added it while we were waiting on the directory.
+
                 if (seenUpns.has(upn.toLowerCase())) {
                   row.errors.push(strings.BulkErrDuplicateUpn);
                 } else {
@@ -329,7 +311,7 @@ export const BulkImport: React.FC<IBulkImportProps> = ({ onSubmitted }) => {
     setPhase('submitting');
     let created: number = 0;
     let failed: number = 0;
-    // Track which rows already succeeded so a retry doesn't re-create them.
+
     const submittedRowIndices: Set<number> = new Set();
     const templateByTitle: Map<string, ITemplateListItem> = new Map(
       (templates.data ?? []).map((t) => [t.title, t])
@@ -341,10 +323,7 @@ export const BulkImport: React.FC<IBulkImportProps> = ({ onSubmitted }) => {
         }
         const row = readyRows[i];
         const d = row.data;
-        // The row's own department/usageLocation/licenses columns are
-        // required and always win — a template column here only supplies
-        // what a CSV row can't carry directly: access grants and the
-        // access-review window, matching the named template's settings.
+
         const matchedTemplate: ITemplateListItem | undefined = d.template
           ? templateByTitle.get(d.template)
           : undefined;
@@ -399,8 +378,7 @@ export const BulkImport: React.FC<IBulkImportProps> = ({ onSubmitted }) => {
           created++;
         } catch {
           failed++;
-          // Continue with the next row — partial success is better than
-          // aborting and leaving the operator with no idea what worked.
+
         }
       }
       await queryClient.invalidateQueries(QK_JOBS);
@@ -409,7 +387,7 @@ export const BulkImport: React.FC<IBulkImportProps> = ({ onSubmitted }) => {
         reset();
         onSubmitted();
       } else {
-        // Partial failure: show how many succeeded and how many failed.
+
         setFileError(
           `${formatString(strings.BulkSubmittedToast, String(created))} — ${failed} failed.`
         );

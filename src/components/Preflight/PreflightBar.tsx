@@ -16,11 +16,6 @@ const useStyles = makeStyles({
   }
 });
 
-/**
- * Permission preflight surface (spec Section 1): shown at app load when the
- * signed-in operator lacks Entra roles for some capabilities. Purely
- * informational — enforcement happens in Entra, not here.
- */
 export const PreflightBar: React.FC = () => {
   const styles = useStyles();
   const preflight = usePreflight();

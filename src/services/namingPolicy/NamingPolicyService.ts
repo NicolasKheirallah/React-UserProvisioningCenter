@@ -9,11 +9,6 @@ interface ICountedCollection {
   value: { id: string }[];
 }
 
-/**
- * Graph-backed availability checks for the pure naming engine.
- * Collisions are checked on userPrincipalName, mail and proxyAddresses,
- * including soft-deleted users (spec Section 5 step 4).
- */
 export class NamingPolicyService {
   private readonly _graph: GraphService;
   private readonly _extraReservedNames: readonly string[];
@@ -41,8 +36,7 @@ export class NamingPolicyService {
 
   public async checkUpnAvailability(upn: string, signal?: AbortSignal): Promise<UpnAvailability> {
     const literal: string = escapeODataLiteral(upn);
-    // proxyAddresses stores 'SMTP:' (primary) and 'smtp:' (alias) prefixes;
-    // the eq comparison is case-sensitive for this property, so test both.
+
     const filter: string =
       `userPrincipalName eq '${literal}' or mail eq '${literal}' ` +
       `or proxyAddresses/any(p:p eq 'smtp:${literal}') ` +

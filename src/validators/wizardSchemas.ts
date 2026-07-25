@@ -5,7 +5,6 @@ const ISO_DATE: RegExp = /^\d{4}-\d{2}-\d{2}$/;
 const UPN_LOCAL: RegExp = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
 const ISO_COUNTRY: RegExp = /^[A-Z]{2}$/;
 
-/** Wizard step 1 — Personal. */
 export const personalSchema = yup.object({
   firstName: yup.string().trim().required('required').max(NAME_MAX, 'tooLong'),
   lastName: yup.string().trim().required('required').max(NAME_MAX, 'tooLong'),
@@ -18,7 +17,6 @@ export const personalSchema = yup.object({
   personalEmail: yup.string().trim().email('invalidEmail')
 });
 
-/** Wizard step 2 — Employment. */
 export const employmentSchema = yup.object({
   jobTitle: yup.string().trim().required('required').max(128, 'tooLong'),
   department: yup.string().trim().required('required').max(64, 'tooLong'),
@@ -35,7 +33,6 @@ export const employmentSchema = yup.object({
   hireDate: yup.string().required('required').matches(ISO_DATE, 'invalidDate')
 });
 
-/** Wizard step 3 — Identity. */
 export const identitySchema = yup.object({
   userPrincipalName: yup.string().trim().required('required').email('invalidUpn'),
   mailNickname: yup
@@ -47,7 +44,6 @@ export const identitySchema = yup.object({
   domain: yup.string().trim().required('required')
 });
 
-/** Wizard step 4 — Account settings. */
 export const accountSettingsSchema = yup.object({
   usageLocation: yup.string().required('required').matches(ISO_COUNTRY, 'invalidCountry'),
   accountEnabled: yup.boolean().required(),
@@ -55,7 +51,6 @@ export const accountSettingsSchema = yup.object({
   forceChangePassword: yup.boolean().required()
 });
 
-/** Wizard step 5 — Licenses (selection may be empty; exhausted SKUs are blocked in the UI and re-checked by the engine). */
 export const licensesSchema = yup.object({
   licenses: yup
     .array()

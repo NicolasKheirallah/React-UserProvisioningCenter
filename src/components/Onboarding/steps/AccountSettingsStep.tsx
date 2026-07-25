@@ -32,7 +32,6 @@ const useStyles = makeStyles({
   }
 });
 
-/** Wizard step 4 — Account settings (usage location, enablement, credential mode). */
 export const AccountSettingsStep: React.FC = () => {
   const styles = useStyles();
   const { state, dispatch } = useWizard();
@@ -46,7 +45,6 @@ export const AccountSettingsStep: React.FC = () => {
   const errors = formState.errors;
   const values: IAccountSettings = watch();
 
-  // Re-seed ONLY on mount, not on every draft change (would wipe mid-typing).
   const seeded = React.useRef(false);
   React.useEffect(() => {
     if (seeded.current) {
@@ -56,11 +54,6 @@ export const AccountSettingsStep: React.FC = () => {
     reset(state.draft.accountSettings);
   }, [reset, state.draft.accountSettings]);
 
-  // Persist edits into the wizard context on navigation away, not on every
-  // toggle/selection — see the matching comment in PersonalStep.tsx. Unlike
-  // the other steps this one is fully controlled (watch() above already
-  // subscribes to every field for rendering), so this only changes *when*
-  // the reducer is told about it, not how often this component re-renders.
   useSaveOnUnmount(() => {
     dispatch({ type: 'saveAccountSettings', accountSettings: getValues() });
   });

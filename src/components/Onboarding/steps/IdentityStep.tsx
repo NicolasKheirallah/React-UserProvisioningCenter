@@ -52,13 +52,6 @@ function rejectionText(reason: CandidateRejectionReason): string {
   }
 }
 
-/**
- * Wizard step 3 — Identity. Shows live UPN candidates from the naming policy
- * engine, flags collisions (including soft-deleted users) and reserved names;
- * the operator may pick any available alternative (spec Section 5). A guest
- * invite skips all of that — Entra assigns the actual UPN on redemption, so
- * this step only collects the external email the invitation is sent to.
- */
 export const IdentityStep: React.FC = () => {
   const styles = useStyles();
   const { state, dispatch } = useWizard();
@@ -88,9 +81,6 @@ export const IdentityStep: React.FC = () => {
     state.draft.identity?.accountType === 'guest' ? state.draft.identity.userPrincipalName : ''
   );
 
-  // Keep the selection when the operator navigates away (Back included).
-  // Only save if there's something valid to save — don't overwrite the
-  // draft with empties when unmounting mid-edit.
   useSaveOnUnmount(() => {
     if (isGuest) {
       if (guestEmail && EMAIL_RE.test(guestEmail)) {
@@ -121,7 +111,7 @@ export const IdentityStep: React.FC = () => {
   });
 
   React.useEffect(() => {
-    // Default the selection to the engine's recommendation when none is made.
+
     if (!isGuest && !selected && naming.data?.chosen) {
       setSelected(naming.data.chosen);
     }

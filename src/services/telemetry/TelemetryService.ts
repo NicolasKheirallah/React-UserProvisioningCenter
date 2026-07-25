@@ -1,17 +1,8 @@
-/**
- * Lightweight telemetry sink. No external dependency (no Application Insights
- * SDK) to keep the bundle small and SPFx peer deps stable; instead it emits
- * structured events to console + an in-memory ring buffer that operators can
- * inspect for diagnostics. Wire to a real telemetry endpoint by replacing
- * `_emit` with your transport of choice (App Insights, custom REST, etc.).
- */
 
 export type TelemetryLevel = 'info' | 'warning' | 'error';
 
-/** Matches UPNs/emails embedded in any string property or Graph request path. */
 const EMAIL_PATTERN: RegExp = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 
-/** Masks the local-part of an email/UPN, keeping the domain for diagnostics. */
 function maskEmailLike(value: string): string {
   return value.replace(EMAIL_PATTERN, (match) => {
     const at: number = match.indexOf('@');
@@ -70,7 +61,6 @@ export class TelemetryService {
     );
   }
 
-  /** Snapshot of recent events for diagnostics UIs. */
   public get events(): readonly ITelemetryEvent[] {
     return this._buffer;
   }

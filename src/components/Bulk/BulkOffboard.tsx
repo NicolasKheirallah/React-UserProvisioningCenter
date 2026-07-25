@@ -91,13 +91,6 @@ function parseBool(value: string): boolean {
   return v === 'true' || v === 'yes' || v === '1';
 }
 
-/**
- * Bulk offboarding import: CSV upload → per-row directory lookup by UPN →
- * one Offboard job per resolved row through the normal approval pipeline.
- * Mirrors BulkImport.tsx's onboarding flow (spec Section: bulk = one job
- * per row), swapping employeeId/naming resolution for a UPN lookup since
- * offboarding always targets an existing user.
- */
 export const BulkOffboard: React.FC<IBulkOffboardProps> = ({ onSubmitted }) => {
   const styles = useStyles();
   const services = useServices();

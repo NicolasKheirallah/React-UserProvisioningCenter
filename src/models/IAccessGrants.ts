@@ -1,20 +1,10 @@
 import type { ITemplateSite, ITemplateTeam } from './ITemplate';
 
-/**
- * Resolved access to grant during onboarding — a snapshot taken at wizard
- * submission time (seeded from a department template via applyTemplate,
- * then editable), not a live reference back to the template. Field names
- * intentionally mirror IDepartmentTemplate's so mapping template -> payload
- * is a straight copy.
- */
 export interface IAccessGrants {
-  /** Entra security group object ids. */
   securityGroups: string[];
-  /** Entra Microsoft 365 (unified) group object ids. */
   m365Groups: string[];
   teams: ITemplateTeam[];
   sharePointSites: ITemplateSite[];
-  /** UPC_ApplicationCatalog item ids (see IApplicationCatalogItem.itemId). */
   applications: string[];
 }
 

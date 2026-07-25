@@ -21,10 +21,7 @@ describe('redactSecrets', () => {
   });
 
   it('redacts the whole nested object when its own container key looks secret-shaped', () => {
-    // Graph's passwordProfile body: { passwordProfile: { password, forceChangePasswordNextSignIn } }
-    // — the exact shape runCreateUser posts. "passwordProfile" itself matches
-    // the secret-key pattern (contains "pass"), so the whole sub-object is
-    // redacted rather than recursed into — the conservative, safe direction.
+
     const body = {
       accountEnabled: true,
       passwordProfile: {

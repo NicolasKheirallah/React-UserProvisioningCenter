@@ -41,9 +41,7 @@ describe('normalizeNamePart', () => {
   });
 
   it('strips a leading or trailing hyphen introduced by a mistyped name', () => {
-    // e.g. a last name pasted as "-Smith" or "Smith-" (copy/paste artifact,
-    // or a hyphenated name mistyped with a leading separator) must not
-    // survive as a candidate that fails the UPN_LOCAL shape downstream.
+
     expect(normalizeNamePart('-Smith')).toBe('smith');
     expect(normalizeNamePart('Smith-')).toBe('smith');
     expect(normalizeNamePart('-Smith-')).toBe('smith');
@@ -67,8 +65,7 @@ describe('toMailNickname', () => {
 
 describe('buildBaseCandidates', () => {
   it('never produces a candidate with a leading/trailing hyphen or dot (must satisfy UPN_LOCAL)', () => {
-    // Matches wizardSchemas.ts / payloadValidator.ts's UPN_LOCAL regex:
-    // ^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$
+
     const UPN_LOCAL: RegExp = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
     for (const candidate of buildBaseCandidates('-Anna', 'Svensson-')) {
       expect(candidate).toMatch(UPN_LOCAL);

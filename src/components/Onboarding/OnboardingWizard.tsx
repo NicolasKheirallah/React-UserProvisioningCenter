@@ -37,7 +37,7 @@ const useStyles = makeStyles({
     display: 'flex',
     columnGap: tokens.spacingHorizontalXXXL,
     alignItems: 'flex-start',
-    // Narrow section/Teams mobile: stepper collapses above the content.
+
     '@container (max-width: 560px)': {
       flexDirection: 'column',
       rowGap: tokens.spacingVerticalL
@@ -54,8 +54,6 @@ export interface IOnboardingWizardProps {
   onSubmitted: () => void;
 }
 
-// Static localized labels — computed once rather than reallocated on every
-// render (this component re-renders on every wizard-draft keystroke).
 const STEP_LABELS: string[] = [
   strings.WizardStepPersonal,
   strings.WizardStepEmployment,
@@ -66,11 +64,6 @@ const STEP_LABELS: string[] = [
   strings.WizardStepReview
 ];
 
-/**
- * Personal, Employment, Identity, Account, Licenses, Access, Review. Draft
- * state lives in the app-level WizardProvider so it survives tab switches;
- * "Start over" is the explicit way to discard it.
- */
 export const OnboardingWizard: React.FC<IOnboardingWizardProps> = ({ onSubmitted }) => {
   const styles = useStyles();
   const { state, dispatch } = useWizard();
@@ -91,10 +84,6 @@ export const OnboardingWizard: React.FC<IOnboardingWizardProps> = ({ onSubmitted
     [services, state.step]
   );
 
-  // Steps already passed can go invalid after the fact — e.g. applying a
-  // department template while revisiting an earlier step. Re-check each
-  // completed step's own schema so the rail flags it before Review, instead
-  // of the operator discovering it only from the Review step's error list.
   const errorSteps: ReadonlySet<number> = React.useMemo(() => {
     const errors = new Set<number>();
     if (state.step > 0 && !personalSchema.isValidSync(state.draft.personal)) errors.add(0);
@@ -120,10 +109,7 @@ export const OnboardingWizard: React.FC<IOnboardingWizardProps> = ({ onSubmitted
       <div className={styles.body}>
         <WizardStepper labels={STEP_LABELS} current={state.step} onStepClick={onStepClick} errorSteps={errorSteps} />
         <div className={styles.content}>
-          {/* Keyed on the step index: a crash in one step's render no longer
-              blanks the whole wizard (stepper/title survive), and navigating
-              away from the broken step — even without an explicit Retry —
-              remounts fresh and recovers. */}
+          {}
           <AppErrorBoundary key={state.step} onError={onStepRenderError}>
             {state.step === 0 ? <PersonalStep /> : undefined}
             {state.step === 1 ? <EmploymentStep /> : undefined}

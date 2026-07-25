@@ -5,7 +5,6 @@ import type { IAuditEntry, IAuditInput } from '../../models';
 
 const SECRET_KEY_PATTERN: RegExp = /pass|tap|secret|credential|token/i;
 
-/** Strip anything secret-shaped before a request summary is persisted. */
 export function redactSecrets(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(redactSecrets);
@@ -29,11 +28,6 @@ export function summarizeRequest(method: string, endpoint: string, body?: unknow
   return JSON.stringify(summary).slice(0, 4000);
 }
 
-/**
- * Client-side, best-effort audit (spec Section 1). Every Graph write gets
- * exactly one entry, success or failure. A failed audit write never breaks
- * the operation being audited — it is logged to the console instead.
- */
 export class AuditService {
   private readonly _data: SharePointDataService;
   private readonly _actorUpn: string;
@@ -44,7 +38,6 @@ export class AuditService {
     this._actorUpn = actorUpn;
   }
 
-  /** Set post-construction — TelemetryService is created after AuditService in the composition root. */
   public setTelemetry(telemetry: TelemetryService): void {
     this._telemetry = telemetry;
   }

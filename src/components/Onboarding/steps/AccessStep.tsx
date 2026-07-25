@@ -50,14 +50,6 @@ const SITE_ROLE_OPTIONS: IAccessRoleOption<'visitor' | 'member' | 'owner'>[] = [
   { value: 'owner', label: strings.AccessRoleOwner }
 ];
 
-/**
- * Wizard step 6 — Access: searchable, multi-select pickers (live Entra
- * directory search for security/M365 groups; client-filtered catalog search
- * for Teams/sites/applications) so an HR operator never pastes a raw Entra
- * object id or scans a long checkbox table. Teams and SharePoint sites keep
- * a compact per-selection role control since role varies per grant.
- * Pre-filled by applyTemplate; every selection here is still editable.
- */
 export const AccessStep: React.FC = () => {
   const styles = useStyles();
   const { state, dispatch } = useWizard();

@@ -21,7 +21,6 @@ export interface IDirectoryGroupHit {
 
 export type GroupSearchKind = 'security' | 'm365';
 
-/** Directory reads used by the wizard (duplicate checks, manager picker, domains). */
 export class UserService {
   private readonly _graph: GraphService;
 
@@ -29,10 +28,9 @@ export class UserService {
     this._graph = graph;
   }
 
-  /** Duplicate employeeId check — blocks leaving wizard step 1 (Phase 1 acceptance). */
   public async isEmployeeIdTaken(employeeId: string, signal?: AbortSignal): Promise<boolean> {
     const literal: string = escapeODataLiteral(employeeId.trim());
-    // employeeId filtering is an advanced query: needs $count + ConsistencyLevel.
+
     const result: { value: { id: string }[] } = await this._graph.get<{
       value: { id: string }[];
     }>(
@@ -44,7 +42,6 @@ export class UserService {
     return (result.value ?? []).length > 0;
   }
 
-  /** Manager picker search. */
   public async searchUsers(term: string, signal?: AbortSignal): Promise<IDirectoryUserHit[]> {
     const literal: string = escapeODataLiteral(term.trim());
     if (!literal) {
@@ -64,7 +61,6 @@ export class UserService {
     return result.value ?? [];
   }
 
-  /** Exact-match UPN lookup — used by bulk offboarding to resolve each CSV row. */
   public async getUserByUpn(upn: string, signal?: AbortSignal): Promise<IDirectoryUserHit | null> {
     const literal: string = escapeODataLiteral(upn.trim());
     if (!literal) {
@@ -81,12 +77,6 @@ export class UserService {
     return (result.value ?? [])[0] ?? null;
   }
 
-  /**
-   * Live directory search for the Access step's group pickers (search by
-   * display name, like the manager/user pickers elsewhere). `kind` narrows
-   * to actual security groups (mail-disabled) vs. Microsoft 365 (Unified)
-   * groups so the two pickers don't cross-suggest the wrong group type.
-   */
   public async searchGroups(
     term: string,
     kind: GroupSearchKind,
@@ -108,12 +98,6 @@ export class UserService {
     return result.value ?? [];
   }
 
-  /**
-   * Resolves display names for group ids the caller already has (e.g. access
-   * grants loaded from a saved template) but hasn't seen through searchGroups
-   * yet in this session — otherwise their picker chips would show a raw
-   * Entra object id instead of a name.
-   */
   public async getGroupsByIds(ids: string[], signal?: AbortSignal): Promise<IDirectoryGroupHit[]> {
     if (ids.length === 0) {
       return [];
@@ -128,7 +112,6 @@ export class UserService {
     return result.value ?? [];
   }
 
-  /** Current license skuIds — used to pre-fill the Transfer panel's "remove" list. */
   public async getUserLicenseSkuIds(userId: string, signal?: AbortSignal): Promise<string[]> {
     const result: { value: { skuId: string }[] } = await this._graph.get<{
       value: { skuId: string }[];
@@ -136,7 +119,6 @@ export class UserService {
     return (result.value ?? []).map((d) => d.skuId);
   }
 
-  /** Verified tenant domains for the UPN domain dropdown. */
   public async getVerifiedDomains(signal?: AbortSignal): Promise<IVerifiedDomain[]> {
     const result: { value: { id: string; isVerified: boolean; isDefault: boolean }[] } =
       await this._graph.get<{

@@ -3,7 +3,6 @@ export interface IUsageLocation {
   name: string;
 }
 
-/** Common ISO 3166-1 alpha-2 usage locations for the account settings step. */
 export const USAGE_LOCATIONS: IUsageLocation[] = [
   { code: 'SE', name: 'Sweden' },
   { code: 'NO', name: 'Norway' },

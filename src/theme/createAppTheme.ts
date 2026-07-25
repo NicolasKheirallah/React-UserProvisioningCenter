@@ -10,12 +10,6 @@ import { createV9ThemeFromSp, type ISpThemeEffects, type ISpThemePalette } from 
 
 export type TeamsAppTheme = 'default' | 'dark' | 'contrast';
 
-/**
- * Resolves the Fluent v9 theme for the current host. Teams dark/high-contrast
- * take precedence (SharePoint theme tokens are not meaningful there); on
- * SharePoint pages the section's theme variant is bridged so the web part
- * follows site branding and inverted (dark) variants.
- */
 export function createAppTheme(
   spTheme: IReadonlyTheme | undefined,
   teamsTheme: TeamsAppTheme | undefined

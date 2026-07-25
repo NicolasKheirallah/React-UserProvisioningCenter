@@ -24,16 +24,10 @@ const useStyles = makeStyles({
 export interface IStepShellProps {
   title: string;
   description?: string;
-  /** Tables and grids get a wider column than plain forms. */
   wide?: boolean;
   children?: React.ReactNode;
 }
 
-/**
- * Standard wizard step column: Subtitle2 step title, Caption1 description,
- * content constrained to a readable single column (Fluent 2 layout guidance —
- * admin center forms never span the full page width).
- */
 export const StepShell: React.FC<IStepShellProps> = (props) => {
   const styles = useStyles();
   return (

@@ -5,18 +5,10 @@ import type { TelemetryService } from '../telemetry/TelemetryService';
 
 type Responder = () => unknown;
 
-/**
- * Mocks the MSGraphClientV3 fluent API (`.api(path).version(v).headers(h).get()`),
- * not GraphService itself — so GraphService's own retry/backoff/timeout/batch
- * code in _execute/_send/batch actually runs under test, the way
- * WorkflowEngine.test.ts's MockGraph (which stubs GraphService's public
- * methods directly) never exercises.
- */
 class MockGraphClient {
   public calls: { method: string; path: string; body?: unknown }[] = [];
   private readonly _queues: Map<string, Responder[]> = new Map();
 
-  /** Queue the next response (or thrown error) for one method+path. FIFO per key. */
   public queue(method: string, path: string, responder: Responder): void {
     const key = `${method} ${path}`;
     const list = this._queues.get(key) ?? [];
@@ -59,7 +51,6 @@ function makeGraph(): { graph: GraphService; client: MockGraphClient } {
   return { graph, client };
 }
 
-/** Shape the SDK throws for a Graph-rejected request. */
 function graphError(statusCode: number, code: string, retryAfterSeconds?: string): unknown {
   return {
     statusCode,
@@ -73,7 +64,6 @@ function graphError(statusCode: number, code: string, retryAfterSeconds?: string
   };
 }
 
-/** Shape a raw network/offline/CORS failure — no statusCode, no headers. */
 function networkError(): unknown {
   return { message: 'Failed to fetch' };
 }
@@ -155,11 +145,11 @@ describe('GraphService._execute (retry/backoff)', () => {
     const { graph, client } = makeGraph();
     const controller = new AbortController();
     client.queue('GET', '/slow-retry', () => {
-      throw graphError(503, 'ServiceUnavailable'); // no Retry-After -> exponential backoff
+      throw graphError(503, 'ServiceUnavailable');
     });
 
     const promise = graph.get('/slow-retry', { signal: controller.signal });
-    // Abort while the first failure's backoff delay is in flight.
+
     setTimeout(() => controller.abort(), 5);
 
     await expect(promise).rejects.toBeInstanceOf(RequestAbortedError);
@@ -186,7 +176,7 @@ describe('GraphService._execute (retry/backoff)', () => {
 describe('GraphService._send (per-request timeout)', () => {
   it('rejects with a 408 GraphServiceError when the call outlasts timeoutMs', async () => {
     const { graph, client } = makeGraph();
-    client.queue('GET', '/hanging', () => new Promise(() => undefined)); // never resolves
+    client.queue('GET', '/hanging', () => new Promise(() => undefined));
 
     await expect(graph.get('/hanging', { timeoutMs: 20, maxAttempts: 1 })).rejects.toMatchObject({
       statusCode: 408,
@@ -247,7 +237,7 @@ describe('GraphService.batch (sub-response retry)', () => {
     expect(result.get('a')).toEqual({ id: 'a', status: 200, body: { ok: 'a' } });
     expect(result.get('b')?.status).toBe(200);
     expect(client.callCount('POST', '/$batch')).toBe(2);
-    // The second round only re-sent the throttled sub-request, not 'b' again.
+
     const secondRoundBody = client.calls[1].body as { requests: { id: string }[] };
     expect(secondRoundBody.requests.map((r) => r.id)).toEqual(['a']);
   });
@@ -292,7 +282,7 @@ describe('batchTyped', () => {
     const { graph, client } = makeGraph();
     client.queue('POST', '/$batch', () => ({
       responses: [{ id: 'org', status: 200, body: { id: 'org-1' } }]
-      // 'me' intentionally missing from the response.
+
     }));
 
     const result = await batchTyped(graph, {

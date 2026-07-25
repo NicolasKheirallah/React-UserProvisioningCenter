@@ -49,7 +49,6 @@ const useStyles = makeStyles({
   }
 });
 
-/** Wizard step 2 — Employment, including the manager people search. */
 export const EmploymentStep: React.FC = () => {
   const styles = useStyles();
   const { state, dispatch } = useWizard();
@@ -63,7 +62,6 @@ export const EmploymentStep: React.FC = () => {
   const { register, handleSubmit, setValue, watch, getValues, formState, reset } = form;
   const errors = formState.errors;
 
-  // Re-seed ONLY on mount, not on every draft change (would wipe mid-typing).
   const seeded = React.useRef(false);
   React.useEffect(() => {
     if (seeded.current) {
@@ -73,8 +71,6 @@ export const EmploymentStep: React.FC = () => {
     reset(state.draft.employment);
   }, [reset, state.draft.employment]);
 
-  // Persist edits into the wizard context on navigation away, not on every
-  // keystroke — see the matching comment in PersonalStep.tsx.
   useSaveOnUnmount(() => {
     dispatch({ type: 'saveEmployment', employment: getValues() });
   });
@@ -164,7 +160,7 @@ export const EmploymentStep: React.FC = () => {
             freeform
             onChange={(ev) => {
               setManagerQuery(ev.target.value);
-              // Typing invalidates the previous selection.
+
               setValue('managerId', undefined);
               setValue('managerDisplayName', undefined);
               setValue('managerUpn', undefined);
