@@ -69,10 +69,15 @@ function makeChain(returnValue: unknown[], capture: ICapture): unknown {
   return chain;
 }
 
-function makeMockSp(returnValue: unknown[], capture: ICapture): unknown {
+function makeMockSp(returnValue: unknown[], capture: ICapture, fieldNames?: string[]): unknown {
   const items = makeChain(returnValue, capture);
+  const fields = {
+    select: (..._args: string[]) => ({
+      top: (_n: number) => async () => (fieldNames ?? []).map((InternalName) => ({ InternalName }))
+    })
+  };
   const lists = {
-    getByTitle: (_title: string) => ({ items }),
+    getByTitle: (_title: string) => (fieldNames ? { items, fields } : { items }),
     ensure: async () => ({ created: true, list: {} })
   };
   const web = {
@@ -177,5 +182,86 @@ describe('SharePointDataService', () => {
     const result = await svc.getTasksPaged(500);
     expect(result.truncated).toBe(false);
     expect(result.items).toHaveLength(5);
+  });
+});
+
+describe('SharePointDataService column resilience', () => {
+  const ALL_SUMMARY_COLUMNS: string[] = [
+    'Id', 'Title', 'JobType', 'Status', 'CorrelationId', 'BatchId', 'TargetUpn',
+    'ScheduledFor', 'Created', 'Modified', 'RunningSince', 'RequestedBy', 'ApprovedBy'
+  ];
+
+  it('selects every column when the list is fully up to date', async () => {
+    const capture: ICapture = {};
+    const sp = makeMockSp([makeJobRow(1)], capture, ALL_SUMMARY_COLUMNS);
+    const svc = new SharePointDataService(sp as unknown as WebPartContext);
+
+    await svc.getJobSummariesPaged();
+
+    expect(capture.select).toContain('BatchId');
+    expect(capture.select).toContain('RunningSince');
+  });
+
+  it('drops columns the list does not have yet instead of failing the whole query', async () => {
+    const capture: ICapture = {};
+    const outOfDate = ALL_SUMMARY_COLUMNS.filter((c) => c !== 'BatchId' && c !== 'RunningSince');
+    const sp = makeMockSp([makeJobRow(1)], capture, outOfDate);
+    const svc = new SharePointDataService(sp as unknown as WebPartContext);
+
+    const page = await svc.getJobSummariesPaged();
+
+    expect(capture.select).not.toContain('BatchId');
+    expect(capture.select).not.toContain('RunningSince');
+    expect(capture.select).toContain('Status');
+    expect(page.items).toHaveLength(1);
+  });
+
+  it('defaults the dropped values so the summary still parses', async () => {
+    const capture: ICapture = {};
+    const outOfDate = ALL_SUMMARY_COLUMNS.filter((c) => c !== 'BatchId' && c !== 'RunningSince');
+    const sp = makeMockSp([makeJobRow(7)], capture, outOfDate);
+    const svc = new SharePointDataService(sp as unknown as WebPartContext);
+
+    const page = await svc.getJobSummariesPaged();
+
+    expect(page.items[0].batchId).toBe('');
+    expect(page.items[0].runningSince).toBeNull();
+    expect(page.items[0].itemId).toBe(7);
+  });
+
+  it('falls back to the full select when the field list cannot be read', async () => {
+    const capture: ICapture = {};
+    const sp = makeMockSp([makeJobRow(1)], capture);
+    const svc = new SharePointDataService(sp as unknown as WebPartContext);
+
+    await svc.getJobSummariesPaged();
+
+    expect(capture.select).toContain('BatchId');
+  });
+
+  it('reads the field list once and caches it across queries', async () => {
+    let fieldReads: number = 0;
+    const capture: ICapture = {};
+    const items = makeChain([makeJobRow(1)], capture);
+    const fields = {
+      select: (..._args: string[]) => ({
+        top: (_n: number) => async () => {
+          fieldReads++;
+          return ALL_SUMMARY_COLUMNS.map((InternalName) => ({ InternalName }));
+        }
+      })
+    };
+    const sp = {
+      web: {
+        lists: { getByTitle: (_t: string) => ({ items, fields }) },
+        currentUser: { select: (..._f: string[]) => async () => ({ Id: 1, Title: 'me', LoginName: 'me@contoso.com' }) }
+      }
+    };
+    const svc = new SharePointDataService(sp as unknown as WebPartContext);
+
+    await svc.getJobSummariesPaged();
+    await svc.getJobSummariesPaged();
+
+    expect(fieldReads).toBe(1);
   });
 });

@@ -293,6 +293,7 @@ export class SharePointDataService {
   private readonly _sp: SPFI;
   private _telemetry: TelemetryService | undefined;
   private _currentUser: { Id: number; Title: string; LoginName: string } | undefined;
+  private readonly _fieldCache: Map<string, Set<string>> = new Map();
 
   public constructor(context: WebPartContext);
   public constructor(sp: SPFI);
@@ -323,6 +324,41 @@ export class SharePointDataService {
       this._currentUser = fetched;
     }
     return this._currentUser;
+  }
+
+  private async _availableFields(listTitle: string): Promise<Set<string> | undefined> {
+    const cached: Set<string> | undefined = this._fieldCache.get(listTitle);
+    if (cached) {
+      return cached;
+    }
+    try {
+      const fields: { InternalName: string }[] = await sharePointRetry(
+        () => this._sp.web.lists.getByTitle(listTitle).fields.select('InternalName').top(500)(),
+        { circuitKey: listTitle, maxAttempts: 2 }
+      );
+      const names: Set<string> = new Set(fields.map((f) => f.InternalName));
+      this._fieldCache.set(listTitle, names);
+      return names;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async _supportedSelect(listTitle: string, desired: string[]): Promise<string[]> {
+    const available: Set<string> | undefined = await this._availableFields(listTitle);
+    if (!available) {
+      return desired;
+    }
+    const supported: string[] = desired.filter((field) => available.has(field.split('/')[0]));
+    const dropped: string[] = desired.filter((field) => !available.has(field.split('/')[0]));
+    if (dropped.length > 0) {
+      this._telemetry?.trackEvent(
+        'data.select.degraded',
+        { list: listTitle, dropped: dropped.join(',') },
+        'warning'
+      );
+    }
+    return supported.length > 0 ? supported : desired;
   }
 
   private async _traceQuery<T>(name: string, list: string, action: () => Promise<T>): Promise<T> {
@@ -418,8 +454,9 @@ export class SharePointDataService {
   private async _getJobSummariesPaged(query?: IJobQuery): Promise<IPagedResult<IJobSummary>> {
     const top: number = query?.top ?? SharePointDataService.DEFAULT_JOBS_TOP;
     const filter: string = buildJobFilter(query);
+    const select: string[] = await this._supportedSelect(LIST_PROVISIONING_JOBS, JOB_SUMMARY_SELECT);
     let request = this._jobs()
-      .items.select(...JOB_SUMMARY_SELECT)
+      .items.select(...select)
       .expand('RequestedBy', 'ApprovedBy')
       .orderBy('Id', false)
       .top(top);
@@ -497,11 +534,12 @@ export class SharePointDataService {
   }
 
   public async getJob(itemId: number): Promise<IProvisioningJob> {
+    const jobSelect: string[] = await this._supportedSelect(LIST_PROVISIONING_JOBS, JOB_SELECT);
     const item: IJobListItem = await sharePointRetry(
       () =>
         this._jobs()
           .items.getById(itemId)
-          .select(...JOB_SELECT, 'odata.etag')
+          .select(...jobSelect, 'odata.etag')
           .expand('RequestedBy', 'ApprovedBy')(),
       { circuitKey: LIST_PROVISIONING_JOBS }
     );
