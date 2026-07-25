@@ -33,7 +33,7 @@ import {
   type TooltipContentProps
 } from 'recharts';
 import * as strings from 'UpcStrings';
-import type { IProvisioningJob, JobStatus, JobType } from '../../models';
+import type { IJobSummary, JobStatus, JobType } from '../../models';
 import { jobStatusLabel, jobTypeLabel } from '../Shared/StatusBadge';
 
 const useStyles = makeStyles({
@@ -376,7 +376,7 @@ const ALL_JOB_TYPES: JobType[] = ['Onboard', 'Offboard', 'Transfer', 'Clone', 'B
  * breakdown, type breakdown, and 7-day trend. Memoized so re-renders triggered
  * by polling don't re-compute when the jobs array reference hasn't changed.
  */
-function computeSummary(jobs: IProvisioningJob[], now: number): IKpiSummary {
+function computeSummary(jobs: IJobSummary[], now: number): IKpiSummary {
   const statusCounts: Map<JobStatus, number> = new Map();
   const typeCounts: Map<JobType, number> = new Map();
   let pending = 0;
@@ -501,7 +501,7 @@ function computeSummary(jobs: IProvisioningJob[], now: number): IKpiSummary {
 export type KpiFilterKey = 'pending' | 'running' | 'failed7' | 'completedToday' | null;
 
 export interface IDashboardOverviewProps {
-  jobs: IProvisioningJob[];
+  jobs: IJobSummary[];
   /** Active KPI filter (tiles double as filters, matching the old dashboard). */
   activeKpi?: KpiFilterKey;
   /** Called when a KPI card is clicked. */

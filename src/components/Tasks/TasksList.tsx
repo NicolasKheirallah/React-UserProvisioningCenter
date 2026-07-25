@@ -137,7 +137,7 @@ export const TasksList: React.FC = () => {
   const [showCompleted, setShowCompleted] = React.useState<boolean>(false);
   const [completingId, setCompletingId] = React.useState<number | null>(null);
 
-  const all: IServiceDeskTask[] = tasks.data ?? [];
+  const all: IServiceDeskTask[] = tasks.data?.items ?? [];
   const visible: IServiceDeskTask[] = showCompleted
     ? all
     : all.filter((t) => t.status === 'Open');

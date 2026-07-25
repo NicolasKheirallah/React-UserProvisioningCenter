@@ -415,9 +415,32 @@ declare interface IUpcStrings {
   PermissionViewAudit: string;
   PermissionManageTasks: string;
   PermissionManageSettings: string;
+  PermissionManageDelegations: string;
+
+  ApprovalProgressLabel: string;
+  ApprovalSatisfiedLabel: string;
+  ApproveOnBehalfLabel: string;
+  DelegationsTitle: string;
+  DelegationsEmptyTitle: string;
+  DelegationsEmptyBody: string;
+  DelegationDelegatorLabel: string;
+  DelegationDelegateLabel: string;
+  DelegationStartLabel: string;
+  DelegationEndLabel: string;
+  DelegationReasonLabel: string;
+  DelegationActiveLabel: string;
+  DelegationInactiveLabel: string;
+  DelegationAddLabel: string;
+  DelegationRevokeLabel: string;
+  DelegationSavedToast: string;
+  DelegationRevokedToast: string;
+  DelegationSaveFailed: string;
+  SettingsRequiredApprovalsLabel: string;
+  SettingsRequiredApprovalsHint: string;
 
   // Dashboard truncation
   JobsTruncatedWarning: string;
+  LoadMoreLabel: string;
 
   // Dashboard visualizations
   DashboardOverviewTitle: string;

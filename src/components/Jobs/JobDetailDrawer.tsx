@@ -30,8 +30,9 @@ import { motionTokens } from '@fluentui/react-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as strings from 'UpcStrings';
 import { useServices } from '../../contexts/ServicesContext';
-import { useAppRoles } from '../../hooks/useReferenceData';
-import { QK_AUDIT, QK_JOBS } from '../../constants/queryKeys';
+import { useSettings } from '../../contexts/SettingsContext';
+import { useAppRoles, useJobDetail } from '../../hooks/useReferenceData';
+import { QK_AUDIT, QK_JOB_SUMMARIES } from '../../constants/queryKeys';
 import { canStartJob, isTerminal } from '../../services/engine/jobStateMachine';
 import { targetUserOf } from '../../services/engine/stepHelpers';
 import { downloadCsv, toCsv } from '../../services/util/csv';
@@ -42,12 +43,23 @@ import { CopyOnceDialog } from '../Shared/CopyOnceDialog';
 import { ConfirmDialog } from '../Shared/ConfirmDialog';
 import { useAppToast } from '../Shared/AppToaster';
 import { formatString } from '../Shared/format';
-import {
-  JobStatusBadge,
-  jobStatusLabel,
-  jobTypeLabel,
-  stepDisplayName
-} from '../Shared/StatusBadge';
+import { JobStatusBadge, jobStatusLabel, jobTypeLabel, stepDisplayName } from '../Shared/StatusBadge';
+
+const NARROW_QUERY = '(max-width: 640px)';
+
+function useIsNarrow(): boolean {
+  const [narrow, setNarrow] = React.useState<boolean>(
+    () => typeof window !== 'undefined' && window.matchMedia(NARROW_QUERY).matches
+  );
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mql = window.matchMedia(NARROW_QUERY);
+    const onChange = (): void => setNarrow(mql.matches);
+    mql.addEventListener('change', onChange);
+    return () => mql.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
 
 const useStyles = makeStyles({
   body: {
@@ -55,8 +67,6 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     rowGap: tokens.spacingVerticalL
   },
-
-  // ---- Meta card -----------------------------------------------------------
   metaCard: {
     display: 'flex',
     flexDirection: 'column',
@@ -89,8 +99,6 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase200,
     color: tokens.colorNeutralForeground2
   },
-
-  // ---- Progress hero (the focal point while running) ----------------------
   progressHero: {
     display: 'flex',
     flexDirection: 'column',
@@ -99,15 +107,14 @@ const useStyles = makeStyles({
     borderRadius: tokens.borderRadiusLarge,
     backgroundColor: tokens.colorBrandBackground2,
     border: `1px solid ${tokens.colorBrandStroke2}`,
-    // Micro-animation: gentle scale-in when the hero first appears.
     transformOrigin: 'top center',
-    animationName: {
-      '0%': { opacity: '0', transform: 'scale(0.96) translateY(-4px)' },
-      '100%': { opacity: '1', transform: 'scale(1) translateY(0)' }
-    },
+    animationName: { '0%': { opacity: '0', transform: 'scale(0.96) translateY(-4px)' }, '100%': { opacity: '1', transform: 'scale(1) translateY(0)' } },
     animationDuration: `${motionTokens.durationGentle}ms`,
     animationTimingFunction: motionTokens.curveEasyEase,
-    animationFillMode: 'both'
+    animationFillMode: 'both',
+    '@media (prefers-reduced-motion: reduce)': {
+      animationDuration: '0.01ms'
+    }
   },
   progressHeroHeader: {
     display: 'flex',
@@ -152,10 +159,12 @@ const useStyles = makeStyles({
   progressBar: {
     height: '8px',
     borderRadius: tokens.borderRadiusCircular,
-    // Smooth fill transition when the value updates.
     transitionProperty: 'all',
     transitionDuration: `${motionTokens.durationGentle}ms`,
-    transitionTimingFunction: motionTokens.curveEasyEase
+    transitionTimingFunction: motionTokens.curveEasyEase,
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '0.01ms'
+    }
   },
   doNotCloseBar: {
     display: 'flex',
@@ -175,8 +184,14 @@ const useStyles = makeStyles({
     color: tokens.colorPaletteYellowForeground1,
     flexShrink: 0
   },
-
-  // ---- Step list ----------------------------------------------------------
+  quorumRow: {
+    display: 'flex',
+    alignItems: 'center',
+    columnGap: tokens.spacingHorizontalS,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalM}`,
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground2
+  },
   stepsSection: {
     display: 'flex',
     flexDirection: 'column',
@@ -184,7 +199,10 @@ const useStyles = makeStyles({
   },
   stepList: {
     display: 'flex',
-    flexDirection: 'column'
+    flexDirection: 'column',
+    margin: 0,
+    padding: 0,
+    listStyle: 'none'
   },
   stepItem: {
     display: 'flex',
@@ -195,24 +213,24 @@ const useStyles = makeStyles({
     paddingLeft: tokens.spacingHorizontalS,
     paddingRight: tokens.spacingHorizontalS,
     borderRadius: tokens.borderRadiusMedium,
-    // Micro-animation: background fade-in on status change.
     transitionProperty: 'background-color, transform',
     transitionDuration: `${motionTokens.durationFast}ms`,
     transitionTimingFunction: motionTokens.curveEasyEase,
-    '&:hover': {
-      backgroundColor: tokens.colorNeutralBackground1Hover
+    '&:hover': { backgroundColor: tokens.colorNeutralBackground1Hover },
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '0.01ms'
     }
   },
   stepItemRunning: {
     backgroundColor: tokens.colorBrandBackground2,
-    // Subtle pulse to draw the eye to the active step.
-    animationName: {
-      '0%, 100%': { backgroundColor: tokens.colorBrandBackground2 },
-      '50%': { backgroundColor: tokens.colorBrandBackgroundHover }
-    },
+    animationName: { '0%, 100%': { backgroundColor: tokens.colorBrandBackground2 }, '50%': { backgroundColor: tokens.colorBrandBackgroundHover } },
     animationDuration: '2000ms',
     animationIterationCount: 'infinite',
-    animationTimingFunction: 'ease-in-out'
+    animationTimingFunction: 'ease-in-out',
+    '@media (prefers-reduced-motion: reduce)': {
+      animationName: 'none',
+      backgroundColor: tokens.colorBrandBackground2
+    }
   },
   stepIcon: {
     flexShrink: 0,
@@ -223,27 +241,19 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  stepIconCompleted: {
-    color: tokens.colorPaletteGreenForeground1
-  },
-  stepIconFailed: {
-    color: tokens.colorPaletteRedForeground1
-  },
-  stepIconSkipped: {
-    color: tokens.colorNeutralForeground3
-  },
-  stepIconPending: {
-    color: tokens.colorNeutralForeground4
-  },
+  stepIconCompleted: { color: tokens.colorPaletteGreenForeground1 },
+  stepIconFailed: { color: tokens.colorPaletteRedForeground1 },
+  stepIconSkipped: { color: tokens.colorNeutralForeground3 },
+  stepIconPending: { color: tokens.colorNeutralForeground4 },
   stepIconRunning: {
     color: tokens.colorBrandForeground1,
-    animationName: {
-      'from': { transform: 'rotate(0deg)' },
-      'to': { transform: 'rotate(360deg)' }
-    },
+    animationName: { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } },
     animationDuration: '1500ms',
     animationIterationCount: 'infinite',
-    animationTimingFunction: 'linear'
+    animationTimingFunction: 'linear',
+    '@media (prefers-reduced-motion: reduce)': {
+      animationName: 'none'
+    }
   },
   stepBody: {
     flexGrow: 1,
@@ -257,13 +267,8 @@ const useStyles = makeStyles({
     fontWeight: tokens.fontWeightMedium,
     color: tokens.colorNeutralForeground1
   },
-  stepNamePending: {
-    color: tokens.colorNeutralForeground3
-  },
-  stepDetail: {
-    fontSize: tokens.fontSizeBase200,
-    color: tokens.colorNeutralForeground3
-  },
+  stepNamePending: { color: tokens.colorNeutralForeground3 },
+  stepDetail: { fontSize: tokens.fontSizeBase200, color: tokens.colorNeutralForeground3 },
   stepError: {
     fontSize: tokens.fontSizeBase200,
     color: tokens.colorPaletteRedForeground1,
@@ -284,11 +289,7 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralStroke2,
     flexShrink: 0
   },
-  stepConnectorDone: {
-    backgroundColor: tokens.colorPaletteGreenForeground1
-  },
-
-  // ---- Audit --------------------------------------------------------------
+  stepConnectorDone: { backgroundColor: tokens.colorPaletteGreenForeground1 },
   auditSection: {
     display: 'flex',
     flexDirection: 'column',
@@ -303,71 +304,32 @@ const useStyles = makeStyles({
     borderRadius: tokens.borderRadiusSmall,
     transitionProperty: 'background-color',
     transitionDuration: `${motionTokens.durationFast}ms`,
-    '&:hover': {
-      backgroundColor: tokens.colorNeutralBackground1Hover
+    '&:hover': { backgroundColor: tokens.colorNeutralBackground1Hover },
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '0.01ms'
     }
   },
-  auditAction: {
-    display: 'flex',
-    flexDirection: 'column',
-    rowGap: 0,
-    minWidth: 0,
-    flexGrow: 1
-  },
-  auditMeta: {
-    color: tokens.colorNeutralForeground3,
-    fontSize: tokens.fontSizeBase200
-  },
-
-  // ---- Status announcement (post-run) -------------------------------------
+  auditAction: { display: 'flex', flexDirection: 'column', rowGap: 0, minWidth: 0, flexGrow: 1 },
+  auditMeta: { color: tokens.colorNeutralForeground3, fontSize: tokens.fontSizeBase200 },
   statusAnnouncement: {
     display: 'flex',
     alignItems: 'center',
     columnGap: tokens.spacingHorizontalS,
     padding: tokens.spacingVerticalS,
     borderRadius: tokens.borderRadiusMedium,
-    animationName: {
-      '0%': { opacity: '0', transform: 'translateY(8px)' },
-      '100%': { opacity: '1', transform: 'translateY(0)' }
-    },
+    animationName: { '0%': { opacity: '0', transform: 'translateY(8px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
     animationDuration: `${motionTokens.durationGentle}ms`,
     animationTimingFunction: motionTokens.curveEasyEase,
-    animationFillMode: 'both'
+    animationFillMode: 'both',
+    '@media (prefers-reduced-motion: reduce)': {
+      animationDuration: '0.01ms'
+    }
   },
-  statusAnnouncementSuccess: {
-    backgroundColor: tokens.colorPaletteGreenBackground1,
-    border: `1px solid ${tokens.colorPaletteGreenBorder1}`
-  },
-  statusAnnouncementWarning: {
-    backgroundColor: tokens.colorPaletteDarkOrangeBackground1,
-    border: `1px solid ${tokens.colorPaletteDarkOrangeBorder1}`
-  },
-  statusAnnouncementError: {
-    backgroundColor: tokens.colorPaletteRedBackground1,
-    border: `1px solid ${tokens.colorPaletteRedBorder1}`
-  },
-
-  // ---- Completed progress summary (shown when run is done) ----------------
-  progressSummary: {
-    display: 'flex',
-    alignItems: 'center',
-    columnGap: tokens.spacingHorizontalS,
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
-    borderRadius: tokens.borderRadiusMedium,
-    backgroundColor: tokens.colorNeutralBackground2
-  },
-
-  sectionTitle: {
-    ...typographyStyles.subtitle2,
-    fontWeight: tokens.fontWeightSemibold,
-    color: tokens.colorNeutralForeground1
-  },
-  sectionHeaderRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    columnGap: tokens.spacingHorizontalM
-  }
+  statusAnnouncementSuccess: { backgroundColor: tokens.colorPaletteGreenBackground1, border: `1px solid ${tokens.colorPaletteGreenBorder1}` },
+  statusAnnouncementWarning: { backgroundColor: tokens.colorPaletteDarkOrangeBackground1, border: `1px solid ${tokens.colorPaletteDarkOrangeBorder1}` },
+  statusAnnouncementError: { backgroundColor: tokens.colorPaletteRedBackground1, border: `1px solid ${tokens.colorPaletteRedBorder1}` },
+  sectionTitle: { ...typographyStyles.subtitle2, fontWeight: tokens.fontWeightSemibold, color: tokens.colorNeutralForeground1 },
+  sectionHeaderRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', columnGap: tokens.spacingHorizontalM }
 });
 
 const AUDIT_RESULT_COLOR: Record<AuditResult, 'success' | 'danger' | 'informative'> = {
@@ -387,12 +349,10 @@ function auditResultLabel(result: AuditResult): string {
   }
 }
 
-/** Pad a number to two digits (replaces String.padStart for older lib targets). */
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
-/** Format milliseconds as m:ss or h:mm:ss. */
 function formatElapsed(ms: number): string {
   const totalSeconds: number = Math.floor(ms / 1000);
   const hours: number = Math.floor(totalSeconds / 3600);
@@ -405,7 +365,7 @@ function formatElapsed(ms: number): string {
 }
 
 export interface IJobDetailDrawerProps {
-  job: IProvisioningJob | null;
+  itemId: number;
   onClose: () => void;
 }
 
@@ -414,7 +374,6 @@ interface IPendingCredential {
   resolve: () => void;
 }
 
-/** Icon + color for a step status. */
 function StepIcon({ status }: { status: StepStatus }): React.ReactElement {
   const styles = useStyles();
   switch (status) {
@@ -451,24 +410,18 @@ function StepIcon({ status }: { status: StepStatus }): React.ReactElement {
   }
 }
 
-/**
- * Job detail pane — modernized Fluent 2 treatment.
- *
- * While the engine runs, a branded progress hero anchors the drawer: step
- * counter, animated progress bar, current step name, elapsed timer, and a
- * "keep this tab open" warning. The step list uses a connected timeline with
- * status icons and micro-animations (pulse on the running step, fade-in on
- * status changes). Post-run, the hero collapses to a compact status banner.
- */
-export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose }) => {
+export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClose }) => {
   const styles = useStyles();
   const services = useServices();
   const roles = useAppRoles();
+  const { requiredApprovals } = useSettings();
   const queryClient = useQueryClient();
-
   const toast = useAppToast();
-  const [liveJob, setLiveJob] = React.useState<IProvisioningJob | null>(job);
+  const isNarrow = useIsNarrow();
+
   const [running, setRunning] = React.useState<boolean>(false);
+  const detail = useJobDetail(itemId, !running);
+  const [liveJob, setLiveJob] = React.useState<IProvisioningJob | null>(null);
   const [hasRun, setHasRun] = React.useState<boolean>(false);
   const [confirmCancel, setConfirmCancel] = React.useState<boolean>(false);
   const [actionError, setActionError] = React.useState<string | undefined>(undefined);
@@ -476,15 +429,26 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
   const [elapsedMs, setElapsedMs] = React.useState<number>(0);
   const abortRef = React.useRef<AbortController | undefined>(undefined);
   const runStartRef = React.useRef<number>(0);
+  const titleRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    setLiveJob(job);
     setActionError(undefined);
     setHasRun(false);
     setElapsedMs(0);
-  }, [job]);
+  }, [itemId]);
 
-  // Tick the elapsed-time display every second while running.
+  React.useEffect(() => {
+    if (!running && detail.data) {
+      setLiveJob(detail.data);
+    }
+  }, [detail.data, running]);
+
+  React.useEffect(() => {
+    if (liveJob && !confirmCancel && !pendingCredential) {
+      titleRef.current?.focus();
+    }
+  }, [itemId, confirmCancel, pendingCredential, liveJob === null]);
+
   React.useEffect(() => {
     if (!running) {
       return;
@@ -496,37 +460,29 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
   }, [running]);
 
   const permissions = roles.data?.permissions;
-  const can = (permission: Parameters<NonNullable<typeof permissions>['has']>[0]): boolean =>
-    permissions?.has(permission) ?? false;
+  const can = (permission: Parameters<NonNullable<typeof permissions>['has']>[0]): boolean => permissions?.has(permission) ?? false;
 
   const canViewAudit: boolean = can('viewAudit');
-  const audit = useQuery(
-    [...QK_AUDIT, job?.jobId ?? ''],
-    () => services.data.getAuditEntries(job?.jobId ?? ''),
-    { enabled: !!job && canViewAudit }
-  );
+  const jobId: string | undefined = liveJob?.jobId;
+  const audit = useQuery([...QK_AUDIT, jobId ?? ''], () => services.data.getAuditEntries(jobId ?? ''), {
+    enabled: !!jobId && canViewAudit
+  });
 
-  // Per-template approval routing (IDepartmentTemplate.approverGroupId,
-  // snapshotted onto the payload at submission). Only Onboard/Clone jobs
-  // carry it — everything else has no additional restriction.
-  const approverGroupId: string | null =
-    job && isOnboardingPayload(job.payload) ? job.payload.approverGroupId ?? null : null;
+  const approverGroupId: string | null = liveJob && isOnboardingPayload(liveJob.payload) ? liveJob.payload.approverGroupId ?? null : null;
   const approverMembership = useQuery(
     ['roles', 'isMemberOfGroup', approverGroupId ?? ''],
     ({ signal }) => services.roles.isMemberOfGroup(approverGroupId ?? '', signal),
     { enabled: !!approverGroupId, staleTime: 5 * 60 * 1000 }
   );
 
-  // ---- All hooks MUST be above this point (Rules of Hooks) ----
-
   const refreshJobs = React.useCallback((): void => {
-    void queryClient.invalidateQueries(QK_JOBS);
+    void queryClient.invalidateQueries(QK_JOB_SUMMARIES);
     if (canViewAudit) {
       void queryClient.invalidateQueries(QK_AUDIT);
     }
-  }, [queryClient, canViewAudit]);
+    void detail.refetch();
+  }, [queryClient, canViewAudit, detail]);
 
-  // Track credential promise resolvers so we can resolve them on unmount.
   const credentialResolvers = React.useRef<Array<{ resolve: () => void }>>([]);
   const engineCallbacks = React.useRef({
     onJobUpdated: (updated: IProvisioningJob): void => {
@@ -539,7 +495,6 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
       })
   }).current;
 
-  // Unmount cleanup: abort in-flight run + resolve pending credential promises.
   React.useEffect(
     () => () => {
       abortRef.current?.abort();
@@ -570,62 +525,42 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
     [refreshJobs]
   );
 
-  const safeItemId = (): number | null => (liveJob ? liveJob.itemId : null);
-
   const run = (): void => {
-    const itemId = safeItemId();
-    if (itemId === null) return;
     const controller: AbortController = new AbortController();
     abortRef.current = controller;
     void runAction(() => services.engine.runJob(itemId, engineCallbacks, controller.signal));
   };
 
   const retryStep = (stepId: string): void => {
-    const itemId = safeItemId();
-    if (itemId === null) return;
     const controller: AbortController = new AbortController();
     abortRef.current = controller;
-    void runAction(() =>
-      services.engine.retryStep(itemId, stepId, engineCallbacks, controller.signal)
-    );
+    void runAction(() => services.engine.retryStep(itemId, stepId, engineCallbacks, controller.signal));
   };
 
-  const skipInFlight = React.useRef(false);
   const skipStep = (stepId: string): void => {
-    const itemId = safeItemId();
-    if (itemId === null) return;
-    if (skipInFlight.current) return;
-    skipInFlight.current = true;
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = undefined;
-    }
     const controller: AbortController = new AbortController();
     abortRef.current = controller;
-    void runAction(() =>
-      services.engine.skipStep(itemId, stepId, engineCallbacks, controller.signal)
-    ).then(
-      () => { skipInFlight.current = false; },
-      () => { skipInFlight.current = false; }
-    );
+    void runAction(() => services.engine.skipStep(itemId, stepId, engineCallbacks, controller.signal));
   };
 
   const approve = (): void => {
-    if (!liveJob) return;
     void runAction(async () => {
-      await services.data.approveJob(liveJob.itemId);
-      setLiveJob({ ...liveJob, status: 'Approved' });
-      toast(strings.JobApprovedToast);
+      const outcome = await services.engine.approveJob(itemId);
+      if (outcome.satisfied) {
+        toast(strings.JobApprovedToast);
+      } else {
+        toast(formatString(strings.ApprovalProgressLabel, String(outcome.granted), String(outcome.required)));
+      }
+      await detail.refetch();
     });
   };
 
   const cancel = (): void => {
-    if (!liveJob) return;
     setConfirmCancel(false);
     void runAction(async () => {
-      await services.engine.cancelJob(liveJob.itemId);
-      setLiveJob({ ...liveJob, status: 'Cancelled' });
+      await services.engine.cancelJob(itemId);
       toast(strings.JobCancelledToast, 'info');
+      await detail.refetch();
     });
   };
 
@@ -657,24 +592,26 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
   };
 
   const regenerateCredentials = (): void => {
-    const itemId = safeItemId();
-    if (itemId === null) return;
     const controller: AbortController = new AbortController();
     abortRef.current = controller;
     void runAction(() => services.engine.regenerateCredentials(itemId, engineCallbacks, controller.signal));
   };
 
-  // The parent only mounts this drawer with a non-null job, but the prop
-  // (and this mirrored state) are typed nullable — guard defensively rather
-  // than trust that contract from every future call site.
+  if (detail.isLoading && !liveJob) {
+    return (
+      <Drawer type="overlay" position={isNarrow ? 'bottom' : 'end'} size="medium" open={true} onOpenChange={(_, data) => !data.open && onClose()}>
+        <DrawerBody>
+          <Spinner aria-label={strings.LoadingLabel} />
+        </DrawerBody>
+      </Drawer>
+    );
+  }
   if (!liveJob) {
     return null;
   }
 
-  const isRestrictedNonMember: boolean =
-    !!approverGroupId && approverMembership.data === false;
-  const showApprove: boolean =
-    liveJob.status === 'PendingApproval' && can('approveJobs') && !isRestrictedNonMember;
+  const isRestrictedNonMember: boolean = !!approverGroupId && approverMembership.data === false;
+  const showApprove: boolean = liveJob.status === 'PendingApproval' && can('approveJobs') && !isRestrictedNonMember;
   const showRun: boolean = canStartJob(liveJob.status) && can('runJobs') && !running;
   const showCancel: boolean = !isTerminal(liveJob.status) && can('cancelJobs') && !running;
   const showRegenerate: boolean =
@@ -685,24 +622,15 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
     can('runJobs') &&
     !running;
   const failedSteps: IJobStep[] = liveJob.steps.filter((s) => s.status === 'failed');
-  const runningStep: IJobStep | undefined = liveJob.steps.filter(
-    (s) => s.status === 'running'
-  )[0];
+  const runningStep: IJobStep | undefined = liveJob.steps.filter((s) => s.status === 'running')[0];
 
   const totalSteps: number = liveJob.steps.length;
-  const doneSteps: number = liveJob.steps.filter(
-    (s) => s.status === 'completed' || s.status === 'skipped'
-  ).length;
+  const doneSteps: number = liveJob.steps.filter((s) => s.status === 'completed' || s.status === 'skipped').length;
   const progressValue: number = totalSteps > 0 ? doneSteps / totalSteps : 0;
-  const currentStepNumber: number = runningStep
-    ? liveJob.steps.findIndex((s) => s.stepId === runningStep.stepId) + 1
-    : doneSteps;
+  const currentStepNumber: number = runningStep ? liveJob.steps.findIndex((s) => s.stepId === runningStep.stepId) + 1 : doneSteps;
 
   const finalStatus: IProvisioningJob['status'] = liveJob.status;
-  const announcementTone:
-    | 'statusAnnouncementSuccess'
-    | 'statusAnnouncementWarning'
-    | 'statusAnnouncementError' =
+  const announcementTone: 'statusAnnouncementSuccess' | 'statusAnnouncementWarning' | 'statusAnnouncementError' =
     finalStatus === 'Completed'
       ? 'statusAnnouncementSuccess'
       : finalStatus === 'PartiallyFailed'
@@ -711,11 +639,13 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
           ? 'statusAnnouncementError'
           : 'statusAnnouncementSuccess';
 
+  const approvalsGranted: number = new Set((liveJob.approvals ?? []).map((a) => a.actorUpn.toLowerCase())).size;
+
   return (
     <Drawer
       type="overlay"
-      position="end"
-      size="medium"
+      position={isNarrow ? 'bottom' : 'end'}
+      size={isNarrow ? 'full' : 'medium'}
       open={true}
       onOpenChange={(_, data) => {
         if (!data.open) {
@@ -725,24 +655,18 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
     >
       <DrawerHeader>
         <DrawerHeaderTitle
-          action={
-            <Button
-              appearance="subtle"
-              aria-label={strings.CloseLabel}
-              icon={<Dismiss24Regular />}
-              onClick={onClose}
-            />
-          }
+          ref={titleRef}
+          tabIndex={-1}
+          action={<Button appearance="subtle" aria-label={strings.CloseLabel} icon={<Dismiss24Regular />} onClick={onClose} />}
         >
           {strings.JobDetailTitle}
         </DrawerHeaderTitle>
       </DrawerHeader>
       <DrawerBody className={styles.body}>
-        {/* ---- Meta card ---- */}
         <div className={styles.metaCard}>
           <div className={styles.metaRow}>
             <Text className={styles.metaLabel}>{strings.JobColumnTarget}</Text>
-            <Text className={styles.metaValue}>{targetUserOf(liveJob.payload)}</Text>
+            <Text className={styles.metaValue}>{targetUserOf(liveJob.payload) || liveJob.targetUpn}</Text>
           </div>
           <div className={styles.metaRow}>
             <Text className={styles.metaLabel}>{strings.JobColumnType}</Text>
@@ -765,20 +689,21 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
           {liveJob.scheduledFor ? (
             <div className={styles.metaRow}>
               <Text className={styles.metaLabel}>{strings.ScheduledForLabel}</Text>
-              <Text className={styles.metaValue}>
-                {new Date(liveJob.scheduledFor).toLocaleDateString()}
-              </Text>
+              <Text className={styles.metaValue}>{new Date(liveJob.scheduledFor).toLocaleDateString()}</Text>
             </div>
           ) : undefined}
           <div className={styles.metaRow}>
             <Text className={styles.metaLabel}>{strings.CorrelationIdLabel}</Text>
-            <Text className={mergeClasses(styles.metaValue, styles.metaJobId)}>
-              {liveJob.correlationId}
-            </Text>
+            <Text className={mergeClasses(styles.metaValue, styles.metaJobId)}>{liveJob.correlationId}</Text>
           </div>
         </div>
 
-        {/* ---- Action toolbar ---- */}
+        {liveJob.status === 'PendingApproval' && requiredApprovals > 1 ? (
+          <div className={styles.quorumRow}>
+            <Text size={200}>{formatString(strings.ApprovalProgressLabel, String(approvalsGranted), String(requiredApprovals))}</Text>
+          </div>
+        ) : undefined}
+
         <Toolbar>
           {showApprove ? (
             <ToolbarButton appearance="primary" onClick={approve}>
@@ -787,21 +712,11 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
           ) : undefined}
           {showRun ? (
             <ToolbarButton appearance="primary" onClick={run}>
-              {liveJob.status === 'Running' || liveJob.status === 'PartiallyFailed'
-                ? strings.ResumeLabel
-                : strings.RunLabel}
+              {liveJob.status === 'Running' || liveJob.status === 'PartiallyFailed' ? strings.ResumeLabel : strings.RunLabel}
             </ToolbarButton>
           ) : undefined}
-          {showCancel ? (
-            <ToolbarButton onClick={() => setConfirmCancel(true)}>
-              {strings.CancelJobLabel}
-            </ToolbarButton>
-          ) : undefined}
-          {showRegenerate ? (
-            <ToolbarButton onClick={regenerateCredentials}>
-              {strings.RegenerateCredentialsLabel}
-            </ToolbarButton>
-          ) : undefined}
+          {showCancel ? <ToolbarButton onClick={() => setConfirmCancel(true)}>{strings.CancelJobLabel}</ToolbarButton> : undefined}
+          {showRegenerate ? <ToolbarButton onClick={regenerateCredentials}>{strings.RegenerateCredentialsLabel}</ToolbarButton> : undefined}
         </Toolbar>
 
         {isRestrictedNonMember && liveJob.status === 'PendingApproval' ? (
@@ -810,33 +725,20 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
           </MessageBar>
         ) : undefined}
 
-        {/* ---- Progress hero (while running) ---- */}
         {running ? (
           <div className={styles.progressHero} role="status" aria-live="polite">
             <div className={styles.progressHeroHeader}>
               <Spinner size="tiny" />
               <Text className={styles.progressHeroTitle}>{strings.JobRunningLabel}</Text>
             </div>
-            <Text className={styles.progressHeroStep}>
-              {runningStep ? stepDisplayName(runningStep.stepId) : strings.JobStepStarting}
-            </Text>
-            <Text className={styles.progressHeroSubtext}>
-              {formatString(
-                strings.JobProgressLabel,
-                String(currentStepNumber),
-                String(totalSteps)
-              )}
-            </Text>
+            <Text className={styles.progressHeroStep}>{runningStep ? stepDisplayName(runningStep.stepId) : strings.JobStepStarting}</Text>
+            <Text className={styles.progressHeroSubtext}>{formatString(strings.JobProgressLabel, String(currentStepNumber), String(totalSteps))}</Text>
             <ProgressBar
               className={styles.progressBar}
               value={progressValue}
               shape="rounded"
               thickness="large"
-              aria-label={formatString(
-                strings.JobCompletedOf,
-                String(doneSteps),
-                String(totalSteps)
-              )}
+              aria-label={formatString(strings.JobCompletedOf, String(doneSteps), String(totalSteps))}
             />
             <div className={styles.progressHeroStats}>
               <div className={styles.progressStat}>
@@ -858,11 +760,7 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
             </div>
           </div>
         ) : hasRun ? (
-          <div
-            className={mergeClasses(styles.statusAnnouncement, styles[announcementTone])}
-            role="status"
-            aria-live="polite"
-          >
+          <div className={mergeClasses(styles.statusAnnouncement, styles[announcementTone])} role="status" aria-live="polite">
             {finalStatus === 'Completed' ? (
               <CheckmarkCircle24Regular className={styles.stepIconCompleted} />
             ) : finalStatus === 'Cancelled' ? (
@@ -870,9 +768,7 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
             ) : (
               <ErrorCircle24Regular className={styles.stepIconFailed} />
             )}
-            <Text>
-              {formatString(strings.JobStatusAnnouncement, jobStatusLabel(finalStatus))}
-            </Text>
+            <Text>{formatString(strings.JobStatusAnnouncement, jobStatusLabel(finalStatus))}</Text>
           </div>
         ) : undefined}
 
@@ -882,30 +778,18 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
           </MessageBar>
         ) : undefined}
 
-        {/* ---- Step timeline ---- */}
         <div className={styles.stepsSection}>
           <Text className={styles.sectionTitle}>{strings.JobStepsTitle}</Text>
-          <div className={styles.stepList}>
+          <ol className={styles.stepList}>
             {liveJob.steps.map((step, index) => {
               const isRunningStep: boolean = step.status === 'running';
-              const isDone: boolean =
-                step.status === 'completed' || step.status === 'skipped';
+              const isDone: boolean = step.status === 'completed' || step.status === 'skipped';
               return (
-                <React.Fragment key={step.stepId}>
-                  <div
-                    className={mergeClasses(
-                      styles.stepItem,
-                      isRunningStep && styles.stepItemRunning
-                    )}
-                  >
+                <li key={step.stepId}>
+                  <div className={mergeClasses(styles.stepItem, isRunningStep && styles.stepItemRunning)}>
                     <StepIcon status={step.status} />
                     <div className={styles.stepBody}>
-                      <Text
-                        className={mergeClasses(
-                          styles.stepName,
-                          step.status === 'pending' && styles.stepNamePending
-                        )}
-                      >
+                      <Text className={mergeClasses(styles.stepName, step.status === 'pending' && styles.stepNamePending)}>
                         {stepDisplayName(step.stepId)}
                       </Text>
                       {step.lastError ? (
@@ -919,17 +803,11 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
                         </div>
                       ) : undefined}
                       {step.status === 'completed' && step.completedUtc ? (
-                        <Text className={styles.stepDetail}>
-                          {new Date(step.completedUtc).toLocaleTimeString()}
-                        </Text>
+                        <Text className={styles.stepDetail}>{new Date(step.completedUtc).toLocaleTimeString()}</Text>
                       ) : undefined}
                       {step.status === 'running' && step.skippable && can('skipSteps') ? (
                         <div className={styles.stepErrorAction}>
-                          <Button
-                            size="small"
-                            appearance="subtle"
-                            onClick={() => skipStep(step.stepId)}
-                          >
+                          <Button size="small" appearance="subtle" onClick={() => skipStep(step.stepId)}>
                             {strings.SkipStepLabel}
                           </Button>
                         </div>
@@ -937,20 +815,12 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
                       {step.status === 'failed' && !running ? (
                         <div className={styles.stepErrorAction}>
                           {can('retrySteps') ? (
-                            <Button
-                              size="small"
-                              appearance="primary"
-                              onClick={() => retryStep(step.stepId)}
-                            >
+                            <Button size="small" appearance="primary" onClick={() => retryStep(step.stepId)}>
                               {strings.RetryStepLabel}
                             </Button>
                           ) : undefined}
                           {step.skippable && can('skipSteps') ? (
-                            <Button
-                              size="small"
-                              appearance="subtle"
-                              onClick={() => skipStep(step.stepId)}
-                            >
+                            <Button size="small" appearance="subtle" onClick={() => skipStep(step.stepId)}>
                               {strings.SkipStepLabel}
                             </Button>
                           ) : undefined}
@@ -958,40 +828,24 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
                       ) : undefined}
                     </div>
                   </div>
-                  {index < liveJob.steps.length - 1 ? (
-                    <div
-                      className={mergeClasses(
-                        styles.stepConnector,
-                        isDone && styles.stepConnectorDone
-                      )}
-                    />
-                  ) : undefined}
-                </React.Fragment>
+                  {index < liveJob.steps.length - 1 ? <div className={mergeClasses(styles.stepConnector, isDone && styles.stepConnectorDone)} /> : undefined}
+                </li>
               );
             })}
-          </div>
+          </ol>
         </div>
 
         {failedSteps.length > 0 && !running ? (
           <MessageBar intent="warning">
-            <MessageBarBody>
-              {failedSteps.map((s) => stepDisplayName(s.stepId)).join(', ')}
-            </MessageBarBody>
+            <MessageBarBody>{failedSteps.map((s) => stepDisplayName(s.stepId)).join(', ')}</MessageBarBody>
           </MessageBar>
         ) : undefined}
 
-        {/* ---- Audit trail ---- */}
         {canViewAudit ? (
           <div className={styles.auditSection}>
             <div className={styles.sectionHeaderRow}>
               <Text className={styles.sectionTitle}>{strings.AuditTitle}</Text>
-              <Button
-                appearance="subtle"
-                size="small"
-                icon={<ArrowDownload16Regular />}
-                disabled={(audit.data ?? []).length === 0}
-                onClick={exportAuditCsv}
-              >
+              <Button appearance="subtle" size="small" icon={<ArrowDownload16Regular />} disabled={(audit.data ?? []).length === 0} onClick={exportAuditCsv}>
                 {strings.ExportCsvLabel}
               </Button>
             </div>
@@ -1008,16 +862,11 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
                         {entry.action}
                       </Text>
                       <span className={styles.auditMeta}>
-                        {entry.timestampUtc
-                          ? new Date(entry.timestampUtc).toLocaleString()
-                          : ''}
+                        {entry.timestampUtc ? new Date(entry.timestampUtc).toLocaleString() : ''}
                         {entry.actor ? ` · ${entry.actor}` : ''}
                       </span>
                     </div>
-                    <Badge
-                      appearance="tint"
-                      color={AUDIT_RESULT_COLOR[entry.result] ?? 'informative'}
-                    >
+                    <Badge appearance="tint" color={AUDIT_RESULT_COLOR[entry.result] ?? 'informative'}>
                       {auditResultLabel(entry.result)}
                     </Badge>
                   </div>
@@ -1033,9 +882,7 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ job, onClose 
         onConfirm={() => {
           pendingCredential?.resolve();
           if (pendingCredential) {
-            credentialResolvers.current = credentialResolvers.current.filter(
-              (r) => r.resolve !== pendingCredential.resolve
-            );
+            credentialResolvers.current = credentialResolvers.current.filter((r) => r.resolve !== pendingCredential.resolve);
           }
           setPendingCredential(null);
         }}
