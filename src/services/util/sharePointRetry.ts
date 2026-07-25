@@ -5,7 +5,7 @@ import { TimeoutError, withTimeout } from './withTimeout';
 
 const DEFAULT_MAX_ATTEMPTS: number = 4;
 const BASE_BACKOFF_MS: number = 1000;
-export const DEFAULT_SHAREPOINT_TIMEOUT_MS: number = 30_000;
+export const DEFAULT_SHAREPOINT_TIMEOUT_MS: number = 20_000;
 
 export const sharePointCircuit: CircuitBreaker = new CircuitBreaker({
   failureThreshold: 5,

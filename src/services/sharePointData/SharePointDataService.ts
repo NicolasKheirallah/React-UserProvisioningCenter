@@ -325,6 +325,34 @@ export class SharePointDataService {
     return this._currentUser;
   }
 
+  private async _traceQuery<T>(name: string, list: string, action: () => Promise<T>): Promise<T> {
+    const started: number = Date.now();
+    this._telemetry?.trackEvent('data.query.start', { name, list }, 'warning');
+    try {
+      const result: T = await action();
+      this._telemetry?.trackEvent(
+        'data.query.end',
+        { name, list, durationMs: Date.now() - started },
+        'warning'
+      );
+      return result;
+    } catch (err) {
+      this._telemetry?.trackEvent(
+        'data.query.fail',
+        {
+          name,
+          list,
+          durationMs: Date.now() - started,
+          message: err instanceof Error ? err.message : String(err),
+          errorName: err instanceof Error ? err.name : 'unknown',
+          status: typeof err === 'object' && err !== null && 'status' in err ? String((err as { status: unknown }).status) : ''
+        },
+        'error'
+      );
+      throw err;
+    }
+  }
+
   private _jobs(): ReturnType<SPFI['web']['lists']['getByTitle']> {
     return this._sp.web.lists.getByTitle(LIST_PROVISIONING_JOBS);
   }
@@ -382,6 +410,12 @@ export class SharePointDataService {
   }
 
   public async getJobSummariesPaged(query?: IJobQuery): Promise<IPagedResult<IJobSummary>> {
+    return this._traceQuery('getJobSummariesPaged', LIST_PROVISIONING_JOBS, () =>
+      this._getJobSummariesPaged(query)
+    );
+  }
+
+  private async _getJobSummariesPaged(query?: IJobQuery): Promise<IPagedResult<IJobSummary>> {
     const top: number = query?.top ?? SharePointDataService.DEFAULT_JOBS_TOP;
     const filter: string = buildJobFilter(query);
     let request = this._jobs()
@@ -409,6 +443,12 @@ export class SharePointDataService {
   }
 
   public async getJobsChangeToken(): Promise<{ latestModifiedUtc: string; runningCount: number }> {
+    return this._traceQuery('getJobsChangeToken', LIST_PROVISIONING_JOBS, () =>
+      this._getJobsChangeToken()
+    );
+  }
+
+  private async _getJobsChangeToken(): Promise<{ latestModifiedUtc: string; runningCount: number }> {
     return sharePointRetry(
       async () => {
         const newest: { Modified: string }[] = await this._jobs()
