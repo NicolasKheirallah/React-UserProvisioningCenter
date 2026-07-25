@@ -480,6 +480,13 @@ declare interface IUpcStrings {
   AuditEmptyBody: string;
   AuditNoMatches: string;
   AuditLoadFailed: string;
+  BatchLabel: string;
+  BatchViewTooltip: string;
+  BatchFilterActive: string;
+  BatchClearFilter: string;
+  BatchRetryAllFailed: string;
+  BatchRetryAllSucceeded: string;
+  BatchRetryPartial: string;
 }
 
 declare module 'UpcStrings' {

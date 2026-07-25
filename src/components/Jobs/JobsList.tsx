@@ -4,6 +4,7 @@ import {
   Button,
   Dropdown,
   MessageBar,
+  MessageBarActions,
   MessageBarBody,
   Option,
   SearchBox,
@@ -27,7 +28,7 @@ import { isJobStalled } from '../../models';
 import { downloadCsv, toCsv } from '../../services/util/csv';
 import { DataState } from '../Shared/DataState';
 import { useAppToast } from '../Shared/AppToaster';
-import { JobStatusBadge, jobTypeLabel } from '../Shared/StatusBadge';
+import { JobStatusBadge, jobStatusLabel, jobTypeLabel } from '../Shared/StatusBadge';
 import { JobDetailDrawer } from './JobDetailDrawer';
 import type { KpiFilterKey } from './DashboardOverview';
 
@@ -183,6 +184,8 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
   const [typeFilter, setTypeFilter] = React.useState<JobType | 'all'>('all');
   const [statusFilter, setStatusFilter] = React.useState<JobStatus | 'all'>('all');
   const [scrollTop, setScrollTop] = React.useState<number>(0);
+  const [batchFilter, setBatchFilter] = React.useState<string | null>(null);
+  const [isRetryingBatch, setIsRetryingBatch] = React.useState<boolean>(false);
 
   const canApprove: boolean = roles.data?.permissions.has('approveJobs') ?? false;
 
@@ -195,9 +198,10 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
     return {
       search: deferredSearch.trim() || undefined,
       status,
-      jobType: typeFilter !== 'all' ? [typeFilter] : undefined
+      jobType: typeFilter !== 'all' ? [typeFilter] : undefined,
+      batchId: batchFilter ?? undefined
     };
-  }, [kpi, statusFilter, typeFilter, deferredSearch]);
+  }, [kpi, statusFilter, typeFilter, deferredSearch, batchFilter]);
 
   const jobs = useJobSummaries(query, false);
   const changeToken = useJobsChangeToken(true);
@@ -262,9 +266,44 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
     [services.engine, queryClient, toast]
   );
 
+  const retryFailedInBatch = React.useCallback(async (): Promise<void> => {
+    if (!batchFilter || isRetryingBatch) {
+      return;
+    }
+    setIsRetryingBatch(true);
+    try {
+      const summary = await services.data.getBatchSummary(batchFilter);
+      let succeeded: number = 0;
+      let stillFailing: number = 0;
+      for (const failedItemId of summary.failedItemIds) {
+        try {
+          const job = await services.engine.runJob(failedItemId);
+          if (job.status === 'Completed') {
+            succeeded++;
+          } else {
+            stillFailing++;
+          }
+        } catch {
+          stillFailing++;
+        }
+      }
+      toast(
+        stillFailing === 0
+          ? strings.BatchRetryAllSucceeded
+          : `${strings.BatchRetryPartial} (${succeeded}/${succeeded + stillFailing})`,
+        stillFailing === 0 ? 'success' : 'warning'
+      );
+    } catch {
+      toast(strings.JobActionFailed, 'error');
+    } finally {
+      setIsRetryingBatch(false);
+      void queryClient.invalidateQueries(QK_JOB_SUMMARIES);
+    }
+  }, [batchFilter, isRetryingBatch, services.data, services.engine, queryClient, toast]);
+
   const items: IJobSummary[] = [...(jobs.data?.items ?? []), ...tailPages];
   const truncated: boolean = tailTruncated || (tailPages.length === 0 && (jobs.data?.truncated ?? false));
-  const hasActiveFilters: boolean = !!kpi || typeFilter !== 'all' || statusFilter !== 'all' || !!query.search;
+  const hasActiveFilters: boolean = !!kpi || typeFilter !== 'all' || statusFilter !== 'all' || !!query.search || !!batchFilter;
 
   const exportCsv = (): void => {
     const csv: string = toCsv(
@@ -338,6 +377,38 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
               {isLoadingMore ? strings.LoadingLabel : strings.LoadMoreLabel}
             </Button>
           </div>
+        ) : undefined}
+        {batchFilter ? (
+          <MessageBar intent="info" layout="multiline">
+            <MessageBarBody>
+              {strings.BatchFilterActive}
+              {' '}
+              {(() => {
+                const counts: Record<string, number> = {};
+                for (const job of items) {
+                  counts[job.status] = (counts[job.status] ?? 0) + 1;
+                }
+                return Object.keys(counts)
+                  .map((k) => `${jobStatusLabel(k as JobStatus)}: ${counts[k]}`)
+                  .join(' · ');
+              })()}
+            </MessageBarBody>
+            <MessageBarActions>
+              <Button
+                appearance="primary"
+                size="small"
+                disabled={isRetryingBatch || !items.some((j) => j.status === 'Failed' || j.status === 'PartiallyFailed')}
+                onClick={() => {
+                  void retryFailedInBatch();
+                }}
+              >
+                {isRetryingBatch ? strings.LoadingLabel : strings.BatchRetryAllFailed}
+              </Button>
+              <Button appearance="secondary" size="small" onClick={() => setBatchFilter(null)}>
+                {strings.BatchClearFilter}
+              </Button>
+            </MessageBarActions>
+          </MessageBar>
         ) : undefined}
         <div className={styles.filterRow}>
           <SearchBox
@@ -438,7 +509,22 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
                               {targetOf(job)}
                             </Button>
                           </td>
-                          <td className={styles.cell}>{jobTypeLabel(job.jobType)}</td>
+                          <td className={styles.cell}>
+                            {jobTypeLabel(job.jobType)}
+                            {job.batchId && !batchFilter ? (
+                              <Button
+                                appearance="transparent"
+                                size="small"
+                                title={strings.BatchViewTooltip}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  setBatchFilter(job.batchId);
+                                }}
+                              >
+                                {strings.BatchLabel}
+                              </Button>
+                            ) : undefined}
+                          </td>
                           <td className={styles.cell}>
                             <JobStatusBadge status={job.status} />
                             {isJobStalled(job) ? (

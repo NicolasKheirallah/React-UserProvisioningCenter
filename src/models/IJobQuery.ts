@@ -7,6 +7,7 @@ export interface IJobQuery {
   createdFromUtc?: string;
   createdToUtc?: string;
   requestedBy?: string;
+  batchId?: string;
   top?: number;
 }
 
@@ -20,6 +21,7 @@ export interface IJobSummary {
   requestedBy: string | null;
   approvedBy: string | null;
   correlationId: string;
+  batchId: string;
   createdUtc: string | null;
   modifiedUtc: string | null;
   runningSince: string | null;
@@ -52,6 +54,14 @@ export function isEmptyJobQuery(query: IJobQuery | undefined): boolean {
     (query.jobType ?? []).length === 0 &&
     !query.createdFromUtc &&
     !query.createdToUtc &&
-    !query.requestedBy
+    !query.requestedBy &&
+    !query.batchId
   );
+}
+
+export interface IBatchSummary {
+  batchId: string;
+  total: number;
+  byStatus: Partial<Record<JobStatus, number>>;
+  failedItemIds: number[];
 }

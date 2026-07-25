@@ -41,6 +41,7 @@ import type {
   IApprovalRecord,
   IAuditEntry,
   IAuditQuery,
+  IBatchSummary,
   IDepartmentTemplate,
   IJobPayload,
   IJobQuery,
@@ -71,6 +72,7 @@ interface IJobListItem {
   StepsJson: string;
   ScheduledFor: string | null;
   CorrelationId: string;
+  BatchId: string | null;
   TargetUpn: string | null;
   TargetUserId: string | null;
   ApprovalsJson: string | null;
@@ -90,6 +92,7 @@ const JOB_SELECT: string[] = [
   'StepsJson',
   'ScheduledFor',
   'CorrelationId',
+  'BatchId',
   'TargetUpn',
   'TargetUserId',
   'ApprovalsJson',
@@ -106,6 +109,7 @@ interface IJobSummaryListItem {
   JobType: JobType;
   Status: JobStatus;
   CorrelationId: string;
+  BatchId: string | null;
   TargetUpn: string | null;
   ScheduledFor: string | null;
   Created: string;
@@ -121,6 +125,7 @@ const JOB_SUMMARY_SELECT: string[] = [
   'JobType',
   'Status',
   'CorrelationId',
+  'BatchId',
   'TargetUpn',
   'ScheduledFor',
   'Created',
@@ -176,6 +181,7 @@ function parseJob(item: IJobListItem, telemetry?: TelemetryService): IProvisioni
     requestedBy: item.RequestedBy?.Title ?? null,
     approvedBy: item.ApprovedBy?.Title ?? null,
     correlationId: item.CorrelationId,
+    batchId: item.BatchId ?? '',
     targetUpn: item.TargetUpn ?? '',
     targetUserId: item.TargetUserId,
     createdUtc: item.Created ?? null,
@@ -195,6 +201,7 @@ function parseJobSummary(item: IJobSummaryListItem): IJobSummary {
     requestedBy: item.RequestedBy?.Title ?? null,
     approvedBy: item.ApprovedBy?.Title ?? null,
     correlationId: item.CorrelationId,
+    batchId: item.BatchId ?? '',
     createdUtc: item.Created ?? null,
     modifiedUtc: item.Modified ?? null,
     runningSince: item.RunningSince ?? null
@@ -255,6 +262,7 @@ export interface ICreateJobInput {
   steps: IJobStep[];
   scheduledFor: string | null;
   correlationId: string;
+  batchId?: string;
   targetUpn?: string;
   initialStatus?: 'PendingApproval' | 'Approved';
 }
@@ -420,6 +428,26 @@ export class SharePointDataService {
     );
   }
 
+  public async getBatchSummary(batchId: string): Promise<IBatchSummary> {
+    const literal: string = escapeODataLiteral(batchId);
+    const items: { Id: number; Status: JobStatus }[] = await sharePointRetry(
+      () =>
+        this._jobs()
+          .items.select('Id', 'Status')
+          .filter(`BatchId eq '${literal}'`)
+          .top(SharePointDataService.DEFAULT_JOBS_TOP)(),
+      { circuitKey: LIST_PROVISIONING_JOBS }
+    );
+    const byStatus: Partial<Record<JobStatus, number>> = {};
+    for (const item of items) {
+      byStatus[item.Status] = (byStatus[item.Status] ?? 0) + 1;
+    }
+    const failedItemIds: number[] = items
+      .filter((i) => i.Status === 'Failed' || i.Status === 'PartiallyFailed')
+      .map((i) => i.Id);
+    return { batchId, total: items.length, byStatus, failedItemIds };
+  }
+
   public async getJobStatus(itemId: number): Promise<JobStatus> {
     const item: { Status: JobStatus } = await sharePointRetry(
       () => this._jobs().items.getById(itemId).select('Status')(),
@@ -452,6 +480,7 @@ export class SharePointDataService {
           StepsJson: JSON.stringify(input.steps),
           ScheduledFor: input.scheduledFor,
           CorrelationId: input.correlationId,
+          BatchId: input.batchId ?? '',
           TargetUpn: input.targetUpn ?? '',
           ApprovalsJson: '[]',
           RequestedById: me.Id

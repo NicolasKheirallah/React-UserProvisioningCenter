@@ -21,6 +21,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import * as strings from 'UpcStrings';
 import { parseCsv } from '../../services/util/csv';
+import { newGuid } from '../../services/util/guid';
 import { useServices } from '../../contexts/ServicesContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { QK_JOBS } from '../../constants/queryKeys';
@@ -239,6 +240,7 @@ export const BulkOffboard: React.FC<IBulkOffboardProps> = ({ onSubmitted }) => {
     setPhase('submitting');
     let created: number = 0;
     let failed: number = 0;
+    const batchId: string = newGuid();
     const submittedRowIndices: Set<number> = new Set();
     try {
       for (let i = 0; i < readyRows.length; i++) {
@@ -277,6 +279,7 @@ export const BulkOffboard: React.FC<IBulkOffboardProps> = ({ onSubmitted }) => {
             payload,
             steps: services.engine.buildInitialSteps('Offboard'),
             scheduledFor: null,
+            batchId,
             initialStatus: requireApproval ? 'PendingApproval' : 'Approved'
           });
           submittedRowIndices.add(i);

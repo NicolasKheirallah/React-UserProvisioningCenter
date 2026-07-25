@@ -60,6 +60,7 @@ export interface IProvisioningJob {
   requestedBy: string | null;
   approvedBy: string | null;
   correlationId: string;
+  batchId: string;
   targetUpn: string;
   targetUserId: string | null;
   createdUtc: string | null;

@@ -35,6 +35,9 @@ export function buildJobFilter(query: IJobQuery | undefined): string {
       clauses.push(`Created le datetime'${to}'`);
     }
   }
+  if (query.batchId?.trim()) {
+    clauses.push(`BatchId eq '${escapeODataLiteral(query.batchId.trim())}'`);
+  }
   if (query.requestedBy?.trim()) {
     clauses.push(`RequestedBy/Title eq '${escapeODataLiteral(query.requestedBy.trim())}'`);
   }

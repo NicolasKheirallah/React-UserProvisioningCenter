@@ -499,6 +499,13 @@ define([], function () {
     AuditEmptyTitle: 'No audit entries yet',
     AuditEmptyBody: 'Entries appear here as soon as jobs start writing to Microsoft 365.',
     AuditNoMatches: 'No audit entries match these filters.',
-    AuditLoadFailed: 'Could not load more audit entries.'
+    AuditLoadFailed: 'Could not load more audit entries.',
+    BatchLabel: 'Batch',
+    BatchViewTooltip: 'Show only the jobs submitted in this bulk batch',
+    BatchFilterActive: 'Showing one bulk batch.',
+    BatchClearFilter: 'Show all jobs',
+    BatchRetryAllFailed: 'Retry all failed',
+    BatchRetryAllSucceeded: 'All failed jobs in this batch completed.',
+    BatchRetryPartial: 'Some jobs in this batch are still failing'
   };
 });

@@ -82,6 +82,7 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
       { name: 'RequestedBy', displayName: 'Requested By', type: 'User' },
       { name: 'ApprovedBy', displayName: 'Approved By', type: 'User' },
       { name: 'CorrelationId', displayName: 'Correlation Id', type: 'Text' },
+      { name: 'BatchId', displayName: 'Batch Id', type: 'Text', indexed: true },
       { name: 'TargetUpn', displayName: 'Target UPN', type: 'Text', indexed: true },
       { name: 'TargetUserId', displayName: 'Target User Id', type: 'Text' },
       { name: 'RunningInstanceId', displayName: 'Running Instance Id', type: 'Text' },

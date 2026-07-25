@@ -499,6 +499,13 @@ define([], function () {
     AuditEmptyTitle: 'Inga granskningsposter än',
     AuditEmptyBody: 'Poster visas här så snart jobb börjar skriva till Microsoft 365.',
     AuditNoMatches: 'Inga granskningsposter matchar filtren.',
-    AuditLoadFailed: 'Kunde inte läsa in fler granskningsposter.'
+    AuditLoadFailed: 'Kunde inte läsa in fler granskningsposter.',
+    BatchLabel: 'Batch',
+    BatchViewTooltip: 'Visa endast jobben som skickades i den här massbatchen',
+    BatchFilterActive: 'Visar en massbatch.',
+    BatchClearFilter: 'Visa alla jobb',
+    BatchRetryAllFailed: 'Försök igen med alla misslyckade',
+    BatchRetryAllSucceeded: 'Alla misslyckade jobb i batchen slutfördes.',
+    BatchRetryPartial: 'Några jobb i batchen misslyckas fortfarande'
   };
 });

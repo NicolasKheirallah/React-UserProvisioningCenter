@@ -60,6 +60,7 @@ export interface ICreateJobRequest {
   payload: ICreateJobInput['payload'];
   steps: IJobStep[];
   scheduledFor: string | null;
+  batchId?: string;
   initialStatus?: 'PendingApproval' | 'Approved';
 }
 
@@ -116,6 +117,7 @@ export class WorkflowEngine {
       steps: request.steps,
       scheduledFor: request.scheduledFor,
       correlationId: newGuid(),
+      batchId: request.batchId,
       targetUpn: targetUserOf(request.payload),
       initialStatus: request.initialStatus
     };

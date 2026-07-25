@@ -22,6 +22,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as strings from 'UpcStrings';
 import { parseCsv } from '../../services/util/csv';
 import { resolveTemplateFields } from '../../services/util/resolveTemplateFields';
+import { newGuid } from '../../services/util/guid';
 import { useServices } from '../../contexts/ServicesContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useActiveTemplates, useLicenseOptions, useVerifiedDomains } from '../../hooks/useReferenceData';
@@ -311,6 +312,7 @@ export const BulkImport: React.FC<IBulkImportProps> = ({ onSubmitted }) => {
     setPhase('submitting');
     let created: number = 0;
     let failed: number = 0;
+    const batchId: string = newGuid();
 
     const submittedRowIndices: Set<number> = new Set();
     const templateByTitle: Map<string, ITemplateListItem> = new Map(
@@ -372,6 +374,7 @@ export const BulkImport: React.FC<IBulkImportProps> = ({ onSubmitted }) => {
             payload,
             steps: services.engine.buildInitialSteps('Onboard'),
             scheduledFor: null,
+            batchId,
             initialStatus: requireApproval ? 'PendingApproval' : 'Approved'
           });
           submittedRowIndices.add(i);

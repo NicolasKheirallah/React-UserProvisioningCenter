@@ -79,6 +79,7 @@ export class MockData {
     requestedBy: 'HR Person',
     approvedBy: null,
     correlationId: 'corr-1',
+    batchId: '',
     targetUpn: 'anna.svensson@contoso.com',
     targetUserId: this.targetUserId,
     createdUtc: '2026-01-01T00:00:00Z',
