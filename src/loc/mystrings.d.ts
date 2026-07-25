@@ -499,6 +499,8 @@ declare interface IUpcStrings {
   RolesUnconfiguredBody: string;
   RolesUnconfiguredReadOnly: string;
   RolesBootstrapNotice: string;
+  DiagnosticsTitle: string;
+  DiagnosticsEmpty: string;
 }
 
 declare module 'UpcStrings' {

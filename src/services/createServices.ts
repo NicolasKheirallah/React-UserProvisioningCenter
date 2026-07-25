@@ -62,6 +62,11 @@ export async function createServices(context: WebPartContext): Promise<IServices
   preflight.setTelemetry(telemetry);
   audit.setTelemetry(telemetry);
   data.setTelemetry(telemetry);
+  telemetry.trackEvent(
+    'app.servicesReady',
+    { web: context.pageContext.web.absoluteUrl, operatorUpn },
+    'warning'
+  );
   const webUrl: string = context.pageContext.web.absoluteUrl;
   const photoUrl = (upn: string): string =>
     `${webUrl}/_layouts/15/userphoto.aspx?size=S&accountname=${encodeURIComponent(upn)}`;

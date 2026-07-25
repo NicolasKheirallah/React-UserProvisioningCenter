@@ -518,6 +518,8 @@ define([], function () {
     RolesUnconfiguredTitle: 'Inga roller är kopplade än',
     RolesUnconfiguredBody: 'UPC_Roles har ingen roll som pekar på en Entra-grupp, så ingen har behörigheter och de flesta flikar är dolda. Öppna Roller och ange ett Member Group Id för minst ITAdmin.',
     RolesUnconfiguredReadOnly: 'UPC_Roles har ingen roll som pekar på en Entra-grupp, så ingen har behörigheter. Be en webbplatsägare öppna den här sidan och koppla minst ITAdmin-rollen.',
-    RolesBootstrapNotice: 'Du ser Roller och Inställningar eftersom du kan hantera den här webbplatsen och UPC inte är konfigurerat än. Koppla en roll till en Entra-grupp för att ge normala behörigheter.'
+    RolesBootstrapNotice: 'Du ser Roller och Inställningar eftersom du kan hantera den här webbplatsen och UPC inte är konfigurerat än. Koppla en roll till en Entra-grupp för att ge normala behörigheter.',
+    DiagnosticsTitle: 'UPC-diagnostik (senaste aktivitet)',
+    DiagnosticsEmpty: 'Ingen SharePoint- eller Graph-aktivitet har registrerats än. Om detta förblir tomt medan listan laddas har frågan aldrig startat.'
   };
 });

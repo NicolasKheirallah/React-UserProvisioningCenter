@@ -758,6 +758,10 @@ export class SharePointDataService {
   }
 
   public async getRoleDefinitions(): Promise<IRoleDefinition[]> {
+    return this._traceQuery('getRoleDefinitions', LIST_ROLES, () => this._getRoleDefinitions());
+  }
+
+  private async _getRoleDefinitions(): Promise<IRoleDefinition[]> {
     const items: { Title: AppRole; MemberGroupId: string; PermissionsJson: string | null }[] = await sharePointRetry(
       () => this._sp.web.lists.getByTitle(LIST_ROLES).items.select('Title', 'MemberGroupId', 'PermissionsJson').top(50)(),
       { circuitKey: LIST_ROLES }

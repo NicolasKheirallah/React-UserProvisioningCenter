@@ -27,6 +27,7 @@ import type { IJobQuery, IJobSummary, JobStatus, JobType } from '../../models';
 import { isJobStalled } from '../../models';
 import { downloadCsv, toCsv } from '../../services/util/csv';
 import { DataState } from '../Shared/DataState';
+import { DiagnosticsPanel } from '../Shared/DiagnosticsPanel';
 import { useAppToast } from '../Shared/AppToaster';
 import { JobStatusBadge, jobStatusLabel, jobTypeLabel } from '../Shared/StatusBadge';
 import { JobDetailDrawer } from './JobDetailDrawer';
@@ -342,6 +343,7 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
           {strings.ExportCsvLabel}
         </ToolbarButton>
       </div>
+      {jobs.isLoading || jobs.error ? <DiagnosticsPanel /> : undefined}
       <DataState
         isLoading={jobs.isLoading}
         error={jobs.error}

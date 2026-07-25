@@ -518,6 +518,8 @@ define([], function () {
     RolesUnconfiguredTitle: 'No roles are mapped yet',
     RolesUnconfiguredBody: 'UPC_Roles has no role pointing at an Entra group, so nobody has permissions and most tabs stay hidden. Open Roles and set a Member Group Id for at least ITAdmin.',
     RolesUnconfiguredReadOnly: 'UPC_Roles has no role pointing at an Entra group, so nobody has permissions. Ask a site owner to open this page and map at least the ITAdmin role.',
-    RolesBootstrapNotice: 'You are seeing Roles and Settings because you can manage this site and UPC is not configured yet. Map a role to an Entra group to grant normal permissions.'
+    RolesBootstrapNotice: 'You are seeing Roles and Settings because you can manage this site and UPC is not configured yet. Map a role to an Entra group to grant normal permissions.',
+    DiagnosticsTitle: 'UPC diagnostics (recent activity)',
+    DiagnosticsEmpty: 'No SharePoint or Graph activity has been recorded yet. If this stays empty while the list is loading, the query never started.'
   };
 });
