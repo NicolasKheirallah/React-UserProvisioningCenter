@@ -487,6 +487,14 @@ declare interface IUpcStrings {
   BatchRetryAllFailed: string;
   BatchRetryAllSucceeded: string;
   BatchRetryPartial: string;
+  PermissionRollbackJobs: string;
+  RollbackLabel: string;
+  RollbackTitle: string;
+  RollbackBody: string;
+  RollbackConfirm: string;
+  RollbackSucceeded: string;
+  RollbackPartial: string;
+  RollbackFailed: string;
 }
 
 declare module 'UpcStrings' {

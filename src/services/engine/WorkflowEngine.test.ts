@@ -170,6 +170,88 @@ describe('WorkflowEngine', () => {
     expect(job.status).toBe('Completed');
   });
 
+  describe('rollbackJob', () => {
+    async function completedHarness(): Promise<IHarness> {
+      const h: IHarness = makeHarness('Approved');
+      happyPathHandlers(h.graph);
+      await h.engine.runJob(1, { presentCredentials: async () => undefined });
+      expect(h.data.status).toBe('Completed');
+      h.graph.calls.length = 0;
+      return h;
+    }
+
+    it('requires the rollbackJobs permission', async () => {
+      const h: IHarness = await completedHarness();
+      h.auth.denied.add('rollbackJobs');
+      await expect(h.engine.rollbackJob(1)).rejects.toThrow(/rollbackJobs/);
+    });
+
+    it('disables the created account rather than deleting it', async () => {
+      const h: IHarness = await completedHarness();
+      h.graph.handlers['PATCH /users/user-123'] = () => ({});
+      h.graph.handlers['DELETE /users/user-123/manager/$ref'] = () => ({});
+      h.graph.handlers['POST /users/user-123/assignLicense'] = () => ({});
+
+      await h.engine.rollbackJob(1);
+
+      const deletes = h.graph.calls.filter((c) => c.method === 'DELETE' && c.path === '/users/user-123');
+      expect(deletes).toHaveLength(0);
+      const disable = h.graph.calls.filter(
+        (c) => c.method === 'PATCH' && c.path === '/users/user-123' && (c.body as { accountEnabled?: boolean })?.accountEnabled === false
+      );
+      expect(disable).toHaveLength(1);
+    });
+
+    it('removes assigned licences', async () => {
+      const h: IHarness = await completedHarness();
+      h.graph.handlers['PATCH /users/user-123'] = () => ({});
+      h.graph.handlers['DELETE /users/user-123/manager/$ref'] = () => ({});
+      h.graph.handlers['POST /users/user-123/assignLicense'] = () => ({});
+
+      await h.engine.rollbackJob(1);
+
+      const licenseCalls = h.graph.calls.filter(
+        (c) => c.method === 'POST' && c.path === '/users/user-123/assignLicense'
+      );
+      expect(licenseCalls).toHaveLength(1);
+      expect((licenseCalls[0].body as { removeLicenses: string[] }).removeLicenses).toEqual(['sku-1']);
+    });
+
+    it('marks the job Cancelled and reports which steps were reverted', async () => {
+      const h: IHarness = await completedHarness();
+      h.graph.handlers['PATCH /users/user-123'] = () => ({});
+      h.graph.handlers['DELETE /users/user-123/manager/$ref'] = () => ({});
+      h.graph.handlers['POST /users/user-123/assignLicense'] = () => ({});
+
+      const outcome = await h.engine.rollbackJob(1);
+
+      expect(h.data.status).toBe('Cancelled');
+      expect(outcome.reverted).toContain('create-user');
+      expect(outcome.failed).toHaveLength(0);
+      expect(h.data.auditEntries.some((e) => e.action === 'rollback-job')).toBe(true);
+    });
+
+    it('continues past a failing compensation and reports it', async () => {
+      const h: IHarness = await completedHarness();
+      h.graph.handlers['PATCH /users/user-123'] = () => ({});
+      h.graph.handlers['DELETE /users/user-123/manager/$ref'] = () => ({});
+      h.graph.handlers['POST /users/user-123/assignLicense'] = () => {
+        throw new GraphServiceError('licence service down', 503, 'ServiceUnavailable', 'req-x');
+      };
+
+      const outcome = await h.engine.rollbackJob(1);
+
+      expect(outcome.failed).toContain('assign-licenses');
+      expect(outcome.reverted).toContain('create-user');
+      expect(h.data.status).toBe('Cancelled');
+    });
+
+    it('refuses to roll back a job that is already Cancelled', async () => {
+      const h: IHarness = makeHarness('Cancelled');
+      await expect(h.engine.rollbackJob(1)).rejects.toThrow(/cannot be rolled back/);
+    });
+  });
+
   it('skipStep refuses non-skippable steps', async () => {
     const h: IHarness = makeHarness('PartiallyFailed');
     const failed: IJobStep = {

@@ -506,6 +506,14 @@ define([], function () {
     BatchClearFilter: 'Visa alla jobb',
     BatchRetryAllFailed: 'Försök igen med alla misslyckade',
     BatchRetryAllSucceeded: 'Alla misslyckade jobb i batchen slutfördes.',
-    BatchRetryPartial: 'Några jobb i batchen misslyckas fortfarande'
+    BatchRetryPartial: 'Några jobb i batchen misslyckas fortfarande',
+    PermissionRollbackJobs: 'Återställ jobb',
+    RollbackLabel: 'Återställ',
+    RollbackTitle: 'Återställa det här jobbet?',
+    RollbackBody: 'Detta återställer stegen som redan lyckats: medlemskap i grupper, team och program tas bort, tilldelade licenser återkallas och chefskopplingen rensas. Ett användarkonto som skapats av jobbet inaktiveras, det tas inte bort. Steg som inte kan återställas, som skickad e-post eller en tillfällig åtkomstkod, lämnas orörda. Jobbet markeras sedan som Avbrutet.',
+    RollbackConfirm: 'Återställ',
+    RollbackSucceeded: 'Återställningen är klar.',
+    RollbackPartial: 'Återställningen slutfördes, men vissa steg kunde inte återställas.',
+    RollbackFailed: 'Återställningen misslyckades.'
   };
 });

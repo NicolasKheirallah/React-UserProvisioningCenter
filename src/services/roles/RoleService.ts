@@ -14,6 +14,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
     'retrySteps',
     'skipSteps',
     'cancelJobs',
+    'rollbackJobs',
     'manageTemplates',
     'viewAudit',
     'manageTasks',

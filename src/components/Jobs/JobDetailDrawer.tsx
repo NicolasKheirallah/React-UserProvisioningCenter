@@ -411,6 +411,7 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
   const [liveJob, setLiveJob] = React.useState<IProvisioningJob | null>(null);
   const [hasRun, setHasRun] = React.useState<boolean>(false);
   const [confirmCancel, setConfirmCancel] = React.useState<boolean>(false);
+  const [confirmRollback, setConfirmRollback] = React.useState<boolean>(false);
   const [actionError, setActionError] = React.useState<string | undefined>(undefined);
   const [pendingCredential, setPendingCredential] = React.useState<IPendingCredential | null>(null);
   const [elapsedMs, setElapsedMs] = React.useState<number>(0);
@@ -431,10 +432,10 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
   }, [detail.data, running]);
 
   React.useEffect(() => {
-    if (liveJob && !confirmCancel && !pendingCredential) {
+    if (liveJob && !confirmCancel && !confirmRollback && !pendingCredential) {
       titleRef.current?.focus();
     }
-  }, [itemId, confirmCancel, pendingCredential, liveJob === null]);
+  }, [itemId, confirmCancel, confirmRollback, pendingCredential, liveJob === null]);
 
   React.useEffect(() => {
     if (!running) {
@@ -551,6 +552,18 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
     });
   };
 
+  const rollback = (): void => {
+    setConfirmRollback(false);
+    void runAction(async () => {
+      const outcome = await services.engine.rollbackJob(itemId);
+      toast(
+        outcome.failed.length === 0 ? strings.RollbackSucceeded : strings.RollbackPartial,
+        outcome.failed.length === 0 ? 'success' : 'warning'
+      );
+      await detail.refetch();
+    });
+  };
+
   const exportAuditCsv = (): void => {
     if (!liveJob) return;
     const csv: string = toCsv(
@@ -607,6 +620,11 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
     isOnboardingPayload(liveJob.payload) &&
     liveJob.payload.identity.accountType === 'member' &&
     can('runJobs') &&
+    !running;
+  const showRollback: boolean =
+    (liveJob.status === 'PartiallyFailed' || liveJob.status === 'Failed' || liveJob.status === 'Completed') &&
+    liveJob.steps.some((s) => s.status === 'completed') &&
+    can('rollbackJobs') &&
     !running;
   const failedSteps: IJobStep[] = liveJob.steps.filter((s) => s.status === 'failed');
   const runningStep: IJobStep | undefined = liveJob.steps.filter((s) => s.status === 'running')[0];
@@ -704,6 +722,7 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
           ) : undefined}
           {showCancel ? <ToolbarButton onClick={() => setConfirmCancel(true)}>{strings.CancelJobLabel}</ToolbarButton> : undefined}
           {showRegenerate ? <ToolbarButton onClick={regenerateCredentials}>{strings.RegenerateCredentialsLabel}</ToolbarButton> : undefined}
+          {showRollback ? <ToolbarButton onClick={() => setConfirmRollback(true)}>{strings.RollbackLabel}</ToolbarButton> : undefined}
         </Toolbar>
 
         {isRestrictedNonMember && liveJob.status === 'PendingApproval' ? (
@@ -873,6 +892,16 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
           }
           setPendingCredential(null);
         }}
+      />
+      <ConfirmDialog
+        open={confirmRollback}
+        title={strings.RollbackTitle}
+        message={strings.RollbackBody}
+        confirmLabel={strings.RollbackConfirm}
+        cancelLabel={strings.KeepJobLabel}
+        onConfirm={rollback}
+        onCancel={() => setConfirmRollback(false)}
+        confirmDisabled={running}
       />
       <ConfirmDialog
         open={confirmCancel}

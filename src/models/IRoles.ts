@@ -13,6 +13,7 @@ export type AppPermission =
   | 'retrySteps'
   | 'skipSteps'
   | 'cancelJobs'
+  | 'rollbackJobs'
   | 'manageTemplates'
   | 'viewAudit'
   | 'manageTasks'

@@ -50,4 +50,5 @@ export interface IWorkflowStepDefinition {
   maxAttempts: number;
   continueOnFailure: boolean;
   run: (ctx: IStepContext) => Promise<void>;
+  compensate?: (ctx: IStepContext) => Promise<void>;
 }

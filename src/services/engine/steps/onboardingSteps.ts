@@ -277,6 +277,114 @@ async function batchAddGroupMembers(ctx: IStepContext, userId: string, groupIds:
   return failed;
 }
 
+async function batchRemoveGroupMembers(ctx: IStepContext, userId: string, groupIds: string[], action: string): Promise<void> {
+  for (let i = 0; i < groupIds.length; i += BATCH_SIZE) {
+    const chunk: string[] = groupIds.slice(i, i + BATCH_SIZE);
+    const requests: IBatchRequest[] = chunk.map((groupId) => ({
+      id: groupId,
+      method: 'DELETE',
+      url: `/groups/${groupId}/members/${userId}/$ref`
+    }));
+    try {
+      const responses = await ctx.graph.batch(requests, { signal: ctx.signal });
+      let removed: number = 0;
+      for (const groupId of chunk) {
+        const status = responses.get(groupId)?.status ?? 0;
+        if ((status >= 200 && status < 300) || status === 404) {
+          removed++;
+        }
+      }
+      if (removed > 0) {
+        await ctx.audit.log({
+          jobId: ctx.job.jobId,
+          action,
+          targetUser: ctx.job.targetUpn,
+          graphEndpoint: '/$batch',
+          requestSummary: JSON.stringify({ groupCount: removed }),
+          responseCode: 200,
+          durationMs: 0,
+          result: 'Success',
+          correlationId: ctx.job.correlationId
+        });
+      }
+    } catch (err) {
+      if (err instanceof RequestAbortedError) {
+        throw err;
+      }
+    }
+  }
+}
+
+async function compensateAssignGroups(ctx: IStepContext): Promise<void> {
+  const payload = onboarding(ctx);
+  const groupIds: string[] = [...payload.access.securityGroups, ...payload.access.m365Groups];
+  if (groupIds.length === 0 || !ctx.job.targetUserId) {
+    return;
+  }
+  await batchRemoveGroupMembers(ctx, ctx.job.targetUserId, groupIds, 'rollback-assign-groups');
+}
+
+async function compensateAssignTeams(ctx: IStepContext): Promise<void> {
+  const payload = onboarding(ctx);
+  const teamIds: string[] = payload.access.teams.map((t) => t.teamId);
+  if (teamIds.length === 0 || !ctx.job.targetUserId) {
+    return;
+  }
+  await batchRemoveGroupMembers(ctx, ctx.job.targetUserId, teamIds, 'rollback-assign-teams');
+}
+
+async function compensateAssignApplications(ctx: IStepContext): Promise<void> {
+  const payload = onboarding(ctx);
+  const appItemIds: string[] = payload.access.applications;
+  if (appItemIds.length === 0 || !ctx.job.targetUserId) {
+    return;
+  }
+  const catalog: IApplicationCatalogItem[] = await ctx.data.getApplicationCatalog();
+  const byId: Map<string, IApplicationCatalogItem> = new Map(catalog.map((a) => [String(a.itemId), a]));
+  const groupIds: string[] = appItemIds
+    .map((appItemId) => byId.get(appItemId))
+    .filter((app): app is IApplicationCatalogItem => !!app && app.provisioningType === 'GroupBased' && !!app.targetGroupId)
+    .map((app) => app.targetGroupId as string);
+  if (groupIds.length === 0) {
+    return;
+  }
+  await batchRemoveGroupMembers(ctx, ctx.job.targetUserId, groupIds, 'rollback-assign-applications');
+}
+
+async function compensateAssignLicenses(ctx: IStepContext): Promise<void> {
+  const payload = onboarding(ctx);
+  const skuIds: string[] = payload.licenses.map((l) => l.skuId);
+  if (skuIds.length === 0 || !ctx.job.targetUserId) {
+    return;
+  }
+  const userId: string = ctx.job.targetUserId;
+  const body = { addLicenses: [], removeLicenses: skuIds };
+  await auditedGraphWrite(ctx, 'rollback-assign-licenses', 'POST', `/users/${userId}/assignLicense`, body, () =>
+    ctx.graph.post<void>(`/users/${userId}/assignLicense`, body, { signal: ctx.signal })
+  );
+}
+
+async function compensateAssignManager(ctx: IStepContext): Promise<void> {
+  if (!ctx.job.targetUserId) {
+    return;
+  }
+  const userId: string = ctx.job.targetUserId;
+  await auditedGraphWrite(ctx, 'rollback-assign-manager', 'DELETE', `/users/${userId}/manager/$ref`, {}, () =>
+    ctx.graph.delete<void>(`/users/${userId}/manager/$ref`, { signal: ctx.signal })
+  );
+}
+
+async function compensateCreateUser(ctx: IStepContext): Promise<void> {
+  if (!ctx.job.targetUserId) {
+    return;
+  }
+  const userId: string = ctx.job.targetUserId;
+  const body = { accountEnabled: false };
+  await auditedGraphWrite(ctx, 'rollback-create-user', 'PATCH', `/users/${userId}`, body, () =>
+    ctx.graph.patch<void>(`/users/${userId}`, body, { signal: ctx.signal })
+  );
+}
+
 async function runAssignGroups(ctx: IStepContext): Promise<void> {
   const payload = onboarding(ctx);
   const groupIds: string[] = [...payload.access.securityGroups, ...payload.access.m365Groups];
@@ -670,14 +778,14 @@ async function runCopyGroups(ctx: IStepContext): Promise<void> {
 
 export const ONBOARDING_STEPS: IWorkflowStepDefinition[] = [
   { id: STEP_VALIDATE_INPUT, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runValidateInput },
-  { id: STEP_CREATE_USER, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runCreateUser },
+  { id: STEP_CREATE_USER, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runCreateUser, compensate: compensateCreateUser },
   { id: STEP_SET_USAGE_LOCATION, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runSetUsageLocation },
-  { id: STEP_ASSIGN_MANAGER, skippable: true, maxAttempts: 3, continueOnFailure: false, run: runAssignManager },
-  { id: STEP_ASSIGN_LICENSES, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runAssignLicenses },
-  { id: STEP_ASSIGN_GROUPS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignGroups },
-  { id: STEP_ASSIGN_TEAMS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignTeams },
+  { id: STEP_ASSIGN_MANAGER, skippable: true, maxAttempts: 3, continueOnFailure: false, run: runAssignManager, compensate: compensateAssignManager },
+  { id: STEP_ASSIGN_LICENSES, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runAssignLicenses, compensate: compensateAssignLicenses },
+  { id: STEP_ASSIGN_GROUPS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignGroups, compensate: compensateAssignGroups },
+  { id: STEP_ASSIGN_TEAMS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignTeams, compensate: compensateAssignTeams },
   { id: STEP_ASSIGN_SHAREPOINT, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignSharePoint },
-  { id: STEP_ASSIGN_APPLICATIONS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignApplications },
+  { id: STEP_ASSIGN_APPLICATIONS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignApplications, compensate: compensateAssignApplications },
   { id: STEP_UPLOAD_PHOTO, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runUploadPhoto },
   { id: STEP_PRESENT_CREDENTIALS, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runPresentCredentials },
   { id: STEP_SEND_NOTIFICATIONS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runSendNotifications },
@@ -687,17 +795,17 @@ export const ONBOARDING_STEPS: IWorkflowStepDefinition[] = [
 
 export const CLONE_STEPS: IWorkflowStepDefinition[] = [
   { id: STEP_VALIDATE_INPUT, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runValidateInput },
-  { id: STEP_CREATE_USER, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runCreateUser },
+  { id: STEP_CREATE_USER, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runCreateUser, compensate: compensateCreateUser },
   { id: STEP_SET_USAGE_LOCATION, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runSetUsageLocation },
-  { id: STEP_ASSIGN_MANAGER, skippable: true, maxAttempts: 3, continueOnFailure: false, run: runAssignManager },
-  { id: STEP_ASSIGN_LICENSES, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runAssignLicenses },
+  { id: STEP_ASSIGN_MANAGER, skippable: true, maxAttempts: 3, continueOnFailure: false, run: runAssignManager, compensate: compensateAssignManager },
+  { id: STEP_ASSIGN_LICENSES, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runAssignLicenses, compensate: compensateAssignLicenses },
   { id: STEP_VALIDATE_CLONE_SOURCE, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runValidateCloneSource },
   { id: STEP_COPY_LICENSES, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runCopyLicenses },
   { id: STEP_COPY_GROUPS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runCopyGroups },
-  { id: STEP_ASSIGN_GROUPS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignGroups },
-  { id: STEP_ASSIGN_TEAMS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignTeams },
+  { id: STEP_ASSIGN_GROUPS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignGroups, compensate: compensateAssignGroups },
+  { id: STEP_ASSIGN_TEAMS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignTeams, compensate: compensateAssignTeams },
   { id: STEP_ASSIGN_SHAREPOINT, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignSharePoint },
-  { id: STEP_ASSIGN_APPLICATIONS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignApplications },
+  { id: STEP_ASSIGN_APPLICATIONS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runAssignApplications, compensate: compensateAssignApplications },
   { id: STEP_UPLOAD_PHOTO, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runUploadPhoto },
   { id: STEP_PRESENT_CREDENTIALS, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runPresentCredentials },
   { id: STEP_SEND_NOTIFICATIONS, skippable: true, maxAttempts: 3, continueOnFailure: true, run: runSendNotifications },

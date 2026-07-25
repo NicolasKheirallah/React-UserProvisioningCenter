@@ -506,6 +506,14 @@ define([], function () {
     BatchClearFilter: 'Show all jobs',
     BatchRetryAllFailed: 'Retry all failed',
     BatchRetryAllSucceeded: 'All failed jobs in this batch completed.',
-    BatchRetryPartial: 'Some jobs in this batch are still failing'
+    BatchRetryPartial: 'Some jobs in this batch are still failing',
+    PermissionRollbackJobs: 'Roll back jobs',
+    RollbackLabel: 'Roll back',
+    RollbackTitle: 'Roll back this job?',
+    RollbackBody: 'This reverses the steps that already succeeded: group, team and application memberships are removed, assigned licences are taken back, and the manager link is cleared. A user account created by this job is disabled, not deleted. Steps that cannot be reversed, such as sent mail or a Temporary Access Pass, are left alone. The job is then marked Cancelled.',
+    RollbackConfirm: 'Roll back',
+    RollbackSucceeded: 'Rollback complete.',
+    RollbackPartial: 'Rollback finished, but some steps could not be reversed.',
+    RollbackFailed: 'Rollback failed.'
   };
 });

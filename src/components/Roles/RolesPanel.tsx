@@ -26,6 +26,7 @@ const ALL_PERMISSIONS: readonly AppPermission[] = [
   'retrySteps',
   'skipSteps',
   'cancelJobs',
+  'rollbackJobs',
   'manageTemplates',
   'viewAudit',
   'manageTasks',
@@ -45,6 +46,8 @@ function permissionLabel(permission: AppPermission): string {
       return strings.PermissionRetrySteps;
     case 'skipSteps':
       return strings.PermissionSkipSteps;
+    case 'rollbackJobs':
+      return strings.PermissionRollbackJobs;
     case 'cancelJobs':
       return strings.PermissionCancelJobs;
     case 'manageTemplates':

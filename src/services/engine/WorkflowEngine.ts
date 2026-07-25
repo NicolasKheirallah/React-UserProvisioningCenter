@@ -20,7 +20,7 @@ import type {
   JobType
 } from '../../models';
 import { DEFAULT_APP_SETTINGS, isOnboardingPayload } from '../../models';
-import { assertTransition, canStartJob } from './jobStateMachine';
+import { assertTransition, canStartJob, isTerminal } from './jobStateMachine';
 import { stepsForJobType } from './stepRegistry';
 import { StepFailure } from './stepTypes';
 import type {
@@ -62,6 +62,11 @@ export interface ICreateJobRequest {
   scheduledFor: string | null;
   batchId?: string;
   initialStatus?: 'PendingApproval' | 'Approved';
+}
+
+export interface IRollbackOutcome {
+  reverted: string[];
+  failed: string[];
 }
 
 export interface IApprovalOutcome {
@@ -594,6 +599,83 @@ export class WorkflowEngine {
     const newEtag = await this._deps.data.updateJobSteps(itemId, job.steps, etag);
     callbacks?.onJobUpdated?.(job);
     return newEtag;
+  }
+
+  public async rollbackJob(itemId: number, callbacks?: IEngineCallbacks, signal?: AbortSignal): Promise<IRollbackOutcome> {
+    if (this._runningItems.has(itemId)) {
+      throw new Error(`Job ${itemId} is currently running — wait for it to finish before rolling it back`);
+    }
+    this._runningItems.add(itemId);
+    try {
+      await this._deps.auth.require('rollbackJobs');
+      return await this._withLock(itemId, async (_instanceId, lockEtag) => {
+        const job: IProvisioningJob = await this._deps.data.getJob(itemId);
+        if (isTerminal(job.status) && job.status !== 'Completed') {
+          throw new Error(`Job ${job.jobId} cannot be rolled back from status ${job.status}`);
+        }
+
+        const pipeline: IWorkflowStepDefinition[] = stepsForJobType(job.jobType);
+        const byId: Map<string, IWorkflowStepDefinition> = new Map(pipeline.map((d) => [d.id, d]));
+        const secrets: IJobSecrets = {};
+        const ctx: IStepContext = {
+          graph: this._deps.graph,
+          data: this._deps.data,
+          audit: this._deps.audit,
+          naming: this._deps.naming,
+          users: this._deps.users,
+          siteAccess: this._deps.siteAccess,
+          job,
+          secrets,
+          signal,
+          settings: this._settings,
+          presentCredentials: async () => undefined
+        };
+
+        const reverted: string[] = [];
+        const failed: string[] = [];
+        const completed: IJobStep[] = job.steps.filter((s) => s.status === 'completed');
+        for (let i = completed.length - 1; i >= 0; i--) {
+          const state: IJobStep = completed[i];
+          const definition: IWorkflowStepDefinition | undefined = byId.get(state.stepId);
+          if (!definition?.compensate) {
+            continue;
+          }
+          try {
+            await definition.compensate(ctx);
+            state.status = 'skipped';
+            reverted.push(state.stepId);
+          } catch (err) {
+            if (err instanceof RequestAbortedError) {
+              throw err;
+            }
+            failed.push(state.stepId);
+          }
+        }
+
+        const stepsEtag: string = await this._deps.data.updateJobSteps(itemId, job.steps, lockEtag);
+        await this._deps.data.updateJobStatus(itemId, 'Cancelled', stepsEtag, { skipTransitionCheck: true });
+        job.status = 'Cancelled';
+        callbacks?.onJobUpdated?.(job);
+
+        await this._deps.audit.log({
+          jobId: job.jobId,
+          action: 'rollback-job',
+          targetUser: targetUserOf(job.payload),
+          graphEndpoint: '',
+          requestSummary: JSON.stringify({ reverted, failed }),
+          responseCode: 0,
+          durationMs: 0,
+          result: failed.length === 0 ? 'Success' : 'Failure',
+          correlationId: job.correlationId
+        });
+
+        return { reverted, failed };
+      });
+    } finally {
+      this._runningItems.delete(itemId);
+      this._pendingSkips.delete(itemId);
+      this._lastCancelCheck.delete(itemId);
+    }
   }
 
   public async completeTask(itemId: number): Promise<void> {
