@@ -21,7 +21,6 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import * as strings from 'UpcStrings';
 import { parseCsv } from '../../services/util/csv';
-import { newGuid } from '../../services/util/guid';
 import { useServices } from '../../contexts/ServicesContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { QK_JOBS } from '../../constants/queryKeys';
@@ -280,13 +279,11 @@ export const BulkOffboard: React.FC<IBulkOffboardProps> = ({ onSubmitted }) => {
           }
         };
         try {
-          await services.data.createJob({
-            jobId: newGuid(),
+          await services.engine.createJob({
             jobType: 'Offboard',
             payload,
             steps: services.engine.buildInitialSteps('Offboard'),
             scheduledFor: null,
-            correlationId: newGuid(),
             initialStatus: requireApproval ? 'PendingApproval' : 'Approved'
           });
           submittedRowIndices.add(i);

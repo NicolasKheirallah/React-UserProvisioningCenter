@@ -21,8 +21,6 @@ import type { IServices } from '../../services/createServices';
 import { createAppTheme, type TeamsAppTheme } from '../../theme/createAppTheme';
 import { ListProvisioningService } from '../../services/provisioning/ListProvisioningService';
 
-// Behavioral settings live in the UPC_Settings list (in-app Settings tab,
-// manageSettings permission) — the property pane only hosts provisioning.
 export interface IProvisioningCenterWebPartProps {}
 
 export default class ProvisioningCenterWebPart extends BaseClientSideWebPart<IProvisioningCenterWebPartProps> {
@@ -31,19 +29,14 @@ export default class ProvisioningCenterWebPart extends BaseClientSideWebPart<IPr
   private _themeVariant: IReadonlyTheme | undefined;
   private _provisioning: boolean = false;
   private _provisionStatus: string = '';
-  // React 18 root, created once per web part instance and reused across
-  // SPFx's repeated render() calls (theme changes, property pane refresh).
   private _root: Root | undefined;
+  private _disposed: boolean = false;
 
   protected async onInit(): Promise<void> {
     await super.onInit();
-    // Section theme variants + site theme (supportsThemeVariants in the manifest).
     this._themeProvider = this.context.serviceScope.consume(ThemeProvider.serviceKey);
     this._themeVariant = this._themeProvider.tryGetTheme();
     this._themeProvider.themeChangedEvent.add(this, this._handleThemeChanged);
-    // Composition root: MSGraphClientV3 (delegated) + PnPJS + engine.
-    // A failure here (missing Graph consent, no SPFx context) must surface
-    // clearly instead of leaving the web part blank.
     try {
       this._services = await createServices(this.context);
       this._provisionStatus = strings.ProvisionStatusIdle;
@@ -59,7 +52,6 @@ export default class ProvisioningCenterWebPart extends BaseClientSideWebPart<IPr
     this.render();
   };
 
-  /** Teams host theme; SPFx exposes TeamsJS v1 (theme) or v2 (app.theme) context shapes. */
   private _getTeamsTheme(): TeamsAppTheme | undefined {
     const teams = this.context.sdks.microsoftTeams;
     if (!teams) {
@@ -74,7 +66,7 @@ export default class ProvisioningCenterWebPart extends BaseClientSideWebPart<IPr
   }
 
   public render(): void {
-    if (!this._services) {
+    if (this._disposed || !this._services) {
       return;
     }
     const element: React.ReactElement<IAppProps> = React.createElement(App, {
@@ -90,8 +82,8 @@ export default class ProvisioningCenterWebPart extends BaseClientSideWebPart<IPr
   }
 
   protected onDispose(): void {
-    // Unmount defers its DOM cleanup to a microtask; React 18 warns if a
-    // synchronous unmount races that, so don't call render() after this.
+    this._disposed = true;
+    this._themeProvider?.themeChangedEvent.remove(this, this._handleThemeChanged);
     this._root?.unmount();
     this._root = undefined;
   }
@@ -100,11 +92,6 @@ export default class ProvisioningCenterWebPart extends BaseClientSideWebPart<IPr
     return Version.parse('1.0');
   }
 
-  /**
-   * Property-pane alternative to provisioning-assets/lists.ps1. Requires
-   * Manage Lists rights on the host site; idempotent, so re-running after a
-   * partial failure only creates what is still missing.
-   */
   private _onProvisionListsClick = (): void => {
     void this._provisionLists();
   };
@@ -127,7 +114,8 @@ export default class ProvisioningCenterWebPart extends BaseClientSideWebPart<IPr
         `${strings.ProvisionCreatedLabel}: ${result.createdLists.length}, ` +
         `${strings.ProvisionExistingLabel}: ${result.existingLists.length}, ` +
         `${strings.ProvisionFieldsLabel}: ${result.createdFields}, ` +
-        `${strings.ProvisionItemsLabel}: ${result.createdItems}`;
+        `${strings.ProvisionItemsLabel}: ${result.createdItems}, ` +
+        `${strings.ProvisionIndexesLabel}: ${result.createdIndexes}`;
       this.render();
     } catch (err) {
       const message: string = err instanceof Error ? err.message : '';

@@ -16,7 +16,6 @@ import {
 } from '@fluentui/react-components';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as strings from 'UpcStrings';
-import { newGuid } from '../../services/util/guid';
 import { useServices } from '../../contexts/ServicesContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -161,13 +160,11 @@ export const TransferPanel: React.FC<{ onSubmitted: () => void }> = ({ onSubmitt
       }
     };
     try {
-      await services.data.createJob({
-        jobId: newGuid(),
+      await services.engine.createJob({
         jobType: 'Transfer',
         payload,
         steps: services.engine.buildInitialSteps('Transfer'),
         scheduledFor: null,
-        correlationId: newGuid(),
         initialStatus: requireApproval ? 'PendingApproval' : 'Approved'
       });
       await queryClient.invalidateQueries(QK_JOBS);

@@ -3,6 +3,7 @@ jest.mock('@pnp/sp/webs', () => ({ __esModule: true }));
 jest.mock('@pnp/sp/lists', () => ({ __esModule: true }));
 jest.mock('@pnp/sp/items', () => ({ __esModule: true }));
 jest.mock('@pnp/sp/site-users/web', () => ({ __esModule: true }));
+jest.mock('@pnp/sp/security', () => ({ __esModule: true, PermissionKind: { AddListItems: 2 } }));
 
 import { SharePointDataService } from './SharePointDataService';
 import type { WebPartContext } from '@microsoft/sp-webpart-base';

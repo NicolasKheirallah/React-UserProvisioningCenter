@@ -29,8 +29,6 @@ import { JobsList } from './Jobs/JobsList';
 import { OnboardingWizard } from './Onboarding/OnboardingWizard';
 import { OffboardingWizard } from './Offboarding/OffboardingWizard';
 
-// Tab content is lazy-loaded so the initial bundle stays small; rarely-used
-// tabs (Tasks, Templates, Settings, Bulk, Transfer) only load when first opened.
 const TransferPanel = React.lazy(() =>
   import(/* webpackChunkName: 'upc-transfer' */ './Transfer/TransferPanel').then((m) => ({
     default: m.TransferPanel
@@ -59,8 +57,6 @@ const RolesPanel = React.lazy(() =>
 
 const useStyles = makeStyles({
   root: {
-    // The web part must not inherit the page's typography: pin the Fluent 2
-    // base ramp (Segoe UI, Body1) on the root.
     fontFamily: tokens.fontFamilyBase,
     fontSize: tokens.fontSizeBase300,
     lineHeight: tokens.lineHeightBase300,
@@ -69,10 +65,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     rowGap: tokens.spacingVerticalL,
-    // Guest on the page: no fixed positioning, respects section width.
     width: '100%',
-    // Descendants respond to the web part's width, not the viewport's —
-    // section columns can be narrow on wide screens.
     containerType: 'inline-size'
   },
   header: {
@@ -88,8 +81,6 @@ const useStyles = makeStyles({
     borderBottomStyle: 'solid',
     borderBottomColor: tokens.colorNeutralStroke2
   },
-  // Reserves space so the transition indicator appearing/disappearing never
-  // shifts layout.
   progressSlot: {
     minHeight: '2px'
   },
@@ -119,9 +110,6 @@ const DraftBadge: React.FC<{ className: string }> = ({ className }) => (
 const Shell: React.FC = () => {
   const styles = useStyles();
   const [tab, setTab] = React.useState<ShellTab>('dashboard');
-  // Tab switches are marked as transitions (React 18): the clicked tab
-  // highlights immediately, while mounting the destination's content (a
-  // wizard, a DataGrid) is deprioritized instead of blocking that feedback.
   const [isTabPending, startTabTransition] = React.useTransition();
   const { state: wizardState } = useWizard();
   const { state: offboardState } = useOffboard();
@@ -135,9 +123,11 @@ const Shell: React.FC = () => {
 
   const onboardDraft: boolean = isDraftDirty(wizardState);
   const offboardDraft: boolean = isOffboardDirty(offboardState);
+  const canCreateJobs: boolean = roles.data?.permissions.has('createJobs') ?? false;
   const canManageTemplates: boolean = roles.data?.permissions.has('manageTemplates') ?? false;
   const canManageTasks: boolean = roles.data?.permissions.has('manageTasks') ?? false;
   const canManageSettings: boolean = roles.data?.permissions.has('manageSettings') ?? false;
+  const canManageDelegations: boolean = roles.data?.permissions.has('manageDelegations') ?? false;
   const switchTab = (next: ShellTab): void => {
     startTabTransition(() => setTab(next));
   };
@@ -155,47 +145,45 @@ const Shell: React.FC = () => {
         </Caption1>
       </header>
       <div className={styles.tabs}>
-        <TabList
-          selectedValue={tab}
-          onTabSelect={(_, data) => switchTab(data.value as ShellTab)}
-          aria-label={strings.AppTitle}
-        >
+        <TabList selectedValue={tab} onTabSelect={(_, data) => switchTab(data.value as ShellTab)} aria-label={strings.AppTitle}>
           <Tab value="dashboard">{strings.TabDashboard}</Tab>
-          <Tab value="newUser">
-            {strings.TabNewUser}
-            {onboardDraft ? <DraftBadge className={styles.draftBadge} /> : undefined}
-          </Tab>
-          <Tab value="offboard">
-            {strings.TabOffboard}
-            {offboardDraft ? <DraftBadge className={styles.draftBadge} /> : undefined}
-          </Tab>
-          <Tab value="transfer">{strings.TabTransfer}</Tab>
-          <Tab value="bulk">{strings.TabBulk}</Tab>
-          <Tab value="bulkOffboard">{strings.TabBulkOffboard}</Tab>
+          {canCreateJobs ? (
+            <Tab value="newUser">
+              {strings.TabNewUser}
+              {onboardDraft ? <DraftBadge className={styles.draftBadge} /> : undefined}
+            </Tab>
+          ) : undefined}
+          {canCreateJobs ? (
+            <Tab value="offboard">
+              {strings.TabOffboard}
+              {offboardDraft ? <DraftBadge className={styles.draftBadge} /> : undefined}
+            </Tab>
+          ) : undefined}
+          {canCreateJobs ? <Tab value="transfer">{strings.TabTransfer}</Tab> : undefined}
+          {canCreateJobs ? <Tab value="bulk">{strings.TabBulk}</Tab> : undefined}
+          {canCreateJobs ? <Tab value="bulkOffboard">{strings.TabBulkOffboard}</Tab> : undefined}
           {canManageTasks ? <Tab value="tasks">{strings.TabTasks}</Tab> : undefined}
           {canManageTemplates ? <Tab value="templates">{strings.TabTemplates}</Tab> : undefined}
           {canManageSettings ? <Tab value="settings">{strings.TabSettings}</Tab> : undefined}
-          {canManageSettings ? <Tab value="roles">{strings.TabRoles}</Tab> : undefined}
+          {canManageSettings || canManageDelegations ? <Tab value="roles">{strings.TabRoles}</Tab> : undefined}
         </TabList>
       </div>
-      <div className={styles.progressSlot}>
-        {isTabPending ? <ProgressBar aria-label={strings.LoadingLabel} /> : undefined}
-      </div>
+      <div className={styles.progressSlot}>{isTabPending ? <ProgressBar aria-label={strings.LoadingLabel} /> : undefined}</div>
       <AppErrorBoundary onError={onRenderError}>
         {tab === 'dashboard' ? <JobsList onCreateNew={() => switchTab('newUser')} /> : undefined}
-        {tab === 'newUser' ? <OnboardingWizard onSubmitted={goToDashboard} /> : undefined}
-        {tab === 'offboard' ? <OffboardingWizard onSubmitted={goToDashboard} /> : undefined}
-        {tab === 'transfer' ? (
+        {tab === 'newUser' && canCreateJobs ? <OnboardingWizard onSubmitted={goToDashboard} /> : undefined}
+        {tab === 'offboard' && canCreateJobs ? <OffboardingWizard onSubmitted={goToDashboard} /> : undefined}
+        {tab === 'transfer' && canCreateJobs ? (
           <React.Suspense fallback={<Spinner aria-label={strings.LoadingLabel} />}>
             <TransferPanel onSubmitted={goToDashboard} />
           </React.Suspense>
         ) : undefined}
-        {tab === 'bulk' ? (
+        {tab === 'bulk' && canCreateJobs ? (
           <React.Suspense fallback={<Spinner aria-label={strings.LoadingLabel} />}>
             <BulkImport onSubmitted={goToDashboard} />
           </React.Suspense>
         ) : undefined}
-        {tab === 'bulkOffboard' ? (
+        {tab === 'bulkOffboard' && canCreateJobs ? (
           <React.Suspense fallback={<Spinner aria-label={strings.LoadingLabel} />}>
             <BulkOffboard onSubmitted={goToDashboard} />
           </React.Suspense>
@@ -215,7 +203,7 @@ const Shell: React.FC = () => {
             <SettingsPanel />
           </React.Suspense>
         ) : undefined}
-        {tab === 'roles' && canManageSettings ? (
+        {tab === 'roles' && (canManageSettings || canManageDelegations) ? (
           <React.Suspense fallback={<Spinner aria-label={strings.LoadingLabel} />}>
             <RolesPanel />
           </React.Suspense>
@@ -227,24 +215,11 @@ const Shell: React.FC = () => {
 
 export interface IAppProps {
   services: IServices;
-  /** Bridged host theme (site theme variant / Teams). Falls back to web light. */
   theme?: Theme;
   dir?: 'ltr' | 'rtl';
-  /** SPFx web part instance id — namespaces generated DOM ids and classes. */
   instanceId?: string;
 }
 
-/**
- * Root component. The theme is bridged from the host by the web part class
- * (section theme variants, Teams dark/high contrast); wizard providers live
- * here so in-progress drafts survive switching tabs.
- *
- * IdPrefixProvider MUST wrap FluentProvider: SharePoint Online's own chrome
- * runs Fluent v9, and without a unique prefix both bundles mint the same
- * `fui-FluentProviderX` class — portal surfaces (Dialog, Drawer, Toaster,
- * listboxes) then resolve their CSS variables against SharePoint's provider
- * and render unstyled (SharePoint/sp-dev-docs#9847, microsoft/fluentui#32253).
- */
 export const App: React.FC<IAppProps> = ({ services, theme, dir, instanceId }) => {
   const [queryClient] = React.useState(
     () =>
@@ -270,6 +245,7 @@ export const App: React.FC<IAppProps> = ({ services, theme, dir, instanceId }) =
             </SettingsProvider>
           </ServicesProvider>
         </QueryClientProvider>
+        <div id="upc-dialog-root" />
       </FluentProvider>
     </IdPrefixProvider>
   );

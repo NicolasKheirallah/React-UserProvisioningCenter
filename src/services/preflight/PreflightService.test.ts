@@ -41,11 +41,11 @@ describe('PreflightService', () => {
 
   function makeData(overrides?: {
     getRoleDefinitions?: () => Promise<unknown[]>;
-    probeWriteAccess?: () => Promise<void>;
+    probeWriteAccess?: () => Promise<boolean>;
   }): SharePointDataService {
     return {
       getRoleDefinitions: overrides?.getRoleDefinitions ?? (async () => []),
-      probeWriteAccess: overrides?.probeWriteAccess ?? (async () => undefined)
+      probeWriteAccess: overrides?.probeWriteAccess ?? (async () => true)
     } as unknown as SharePointDataService;
   }
 

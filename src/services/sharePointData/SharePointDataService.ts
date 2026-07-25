@@ -3,6 +3,8 @@ import '@pnp/sp/webs';
 import '@pnp/sp/lists';
 import '@pnp/sp/items';
 import '@pnp/sp/site-users/web';
+import '@pnp/sp/security';
+import { PermissionKind } from '@pnp/sp/security';
 import type { WebPartContext } from '@microsoft/sp-webpart-base';
 import {
   LIST_APPLICATION_CATALOG,
@@ -22,7 +24,6 @@ import { sharePointRetry } from '../util/sharePointRetry';
 import { ConcurrencyError } from '../util/ConcurrencyError';
 import { JobConflictError, isEtagConflict } from '../util/JobConflictError';
 import { buildJobFilter } from '../util/jobFilter';
-import { newGuid } from '../util/guid';
 import type { IPagedResult } from '../util/pagedQuery';
 import { fetchPaged } from '../util/pagedQuery';
 import { assertTransition } from '../engine/jobStateMachine';
@@ -1005,23 +1006,10 @@ export class SharePointDataService {
     );
   }
 
-  public async probeWriteAccess(): Promise<void> {
-    const probeTitle: string = `preflight-probe-${newGuid()}`;
-    await sharePointRetry(
-      async () => {
-        const result = await this._sp.web.lists.getByTitle(LIST_TASKS).items.add({
-          Title: probeTitle,
-          JobId: '',
-          TaskType: 'Other',
-          Instructions: 'Temporary preflight write probe',
-          Status: 'Open'
-        });
-        await this._sp.web.lists
-          .getByTitle(LIST_TASKS)
-          .items.getById((result as { Id: number }).Id)
-          .delete();
-      },
-      { idempotent: false, circuitKey: LIST_TASKS }
+  public async probeWriteAccess(): Promise<boolean> {
+    return sharePointRetry(
+      () => this._sp.web.lists.getByTitle(LIST_TASKS).currentUserHasPermissions(PermissionKind.AddListItems),
+      { circuitKey: LIST_TASKS }
     );
   }
 }

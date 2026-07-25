@@ -21,7 +21,6 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import * as strings from 'UpcStrings';
 import { parseCsv } from '../../services/util/csv';
-import { newGuid } from '../../services/util/guid';
 import { resolveTemplateFields } from '../../services/util/resolveTemplateFields';
 import { useServices } from '../../contexts/ServicesContext';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -389,13 +388,11 @@ export const BulkImport: React.FC<IBulkImportProps> = ({ onSubmitted }) => {
           approverGroupId: matchedTemplate?.template.approverGroupId ?? null
         };
         try {
-          await services.data.createJob({
-            jobId: newGuid(),
+          await services.engine.createJob({
             jobType: 'Onboard',
             payload,
             steps: services.engine.buildInitialSteps('Onboard'),
             scheduledFor: null,
-            correlationId: newGuid(),
             initialStatus: requireApproval ? 'PendingApproval' : 'Approved'
           });
           submittedRowIndices.add(i);

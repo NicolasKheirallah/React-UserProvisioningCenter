@@ -148,8 +148,7 @@ export class PreflightService {
 
       let sharePointWriteOk: boolean = false;
       try {
-        await this._data.probeWriteAccess();
-        sharePointWriteOk = true;
+        sharePointWriteOk = await this._data.probeWriteAccess();
       } catch {
         sharePointWriteOk = false;
       }

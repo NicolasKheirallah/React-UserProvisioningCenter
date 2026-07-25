@@ -10,7 +10,6 @@ import {
 } from '@fluentui/react-components';
 import { useQueryClient } from '@tanstack/react-query';
 import * as strings from 'UpcStrings';
-import { newGuid } from '../../../services/util/guid';
 import { useWizard } from '../../../contexts/WizardContext';
 import { useServices } from '../../../contexts/ServicesContext';
 import { useSettings } from '../../../contexts/SettingsContext';
@@ -189,13 +188,11 @@ export const ReviewStep: React.FC<IReviewStepProps> = ({ onSubmitted }) => {
     setSubmitting(true);
     setError(undefined);
     try {
-      await services.data.createJob({
-        jobId: newGuid(),
+      await services.engine.createJob({
         jobType,
         payload,
         steps: services.engine.buildInitialSteps(jobType),
         scheduledFor: null,
-        correlationId: newGuid(),
         initialStatus: requireApproval ? 'PendingApproval' : 'Approved'
       });
       await queryClient.invalidateQueries(QK_JOBS);

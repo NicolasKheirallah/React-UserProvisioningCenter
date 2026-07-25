@@ -12,6 +12,7 @@ define([], function () {
     ProvisionCreatedLabel: 'lists created',
     ProvisionExistingLabel: 'already existed',
     ProvisionFieldsLabel: 'columns added',
-    ProvisionItemsLabel: 'list items seeded'
+    ProvisionItemsLabel: 'list items seeded',
+    ProvisionIndexesLabel: 'indexes added'
   };
 });
