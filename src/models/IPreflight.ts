@@ -10,7 +10,8 @@ export type CapabilityId =
   | 'revokeSessions'
   | 'sharePointRead'
   | 'sharePointWrite'
-  | 'groupMemberRead';
+  | 'groupMemberRead'
+  | 'schemaValid';
 
 export interface ICapabilityCheck {
   capability: CapabilityId;
@@ -19,10 +20,23 @@ export interface ICapabilityCheck {
   detail: string;
 }
 
+export interface ISchemaGap {
+  list: string;
+  missingList: boolean;
+  missingFields: string[];
+  error: string;
+}
+
+export interface ISchemaValidationResult {
+  gaps: ISchemaGap[];
+  checkedLists: number;
+}
+
 export interface IPreflightResult {
   checks: ICapabilityCheck[];
   missing: ICapabilityCheck[];
   directoryRoleTemplateIds: string[];
   operatorUpn: string;
   requiredGraphScopes: string[];
+  schemaGaps: ISchemaGap[];
 }

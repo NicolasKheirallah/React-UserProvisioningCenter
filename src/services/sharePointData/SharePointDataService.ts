@@ -19,6 +19,7 @@ import {
   LIST_TASKS,
   LIST_TEAMS_CATALOG
 } from '../../constants/listNames';
+import { UPC_LIST_DEFINITIONS } from '../provisioning/listSchemas';
 import { escapeODataLiteral } from '../util/odata';
 import { sharePointRetry } from '../util/sharePointRetry';
 import { ConcurrencyError } from '../util/ConcurrencyError';
@@ -47,6 +48,8 @@ import type {
   IProvisioningJob,
   IRoleDefinition,
   IRoleManagementItem,
+  ISchemaGap,
+  ISchemaValidationResult,
   IServiceDeskTask,
   ISiteCatalogItem,
   ITeamsCatalogItem,
@@ -360,6 +363,14 @@ export class SharePointDataService {
       },
       { circuitKey: LIST_PROVISIONING_JOBS }
     );
+  }
+
+  public async getJobStatus(itemId: number): Promise<JobStatus> {
+    const item: { Status: JobStatus } = await sharePointRetry(
+      () => this._jobs().items.getById(itemId).select('Status')(),
+      { circuitKey: LIST_PROVISIONING_JOBS, maxAttempts: 2 }
+    );
+    return item.Status;
   }
 
   public async getJob(itemId: number): Promise<IProvisioningJob> {
@@ -1009,5 +1020,41 @@ export class SharePointDataService {
       () => this._sp.web.lists.getByTitle(LIST_TASKS).currentUserHasPermissions(PermissionKind.AddListItems),
       { circuitKey: LIST_TASKS }
     );
+  }
+
+  public async validateSchema(): Promise<ISchemaValidationResult> {
+    const results: (ISchemaGap | undefined)[] = await Promise.all(
+      UPC_LIST_DEFINITIONS.map(async (definition) => {
+        try {
+          const fields: { InternalName: string }[] = await sharePointRetry(
+            () => this._sp.web.lists.getByTitle(definition.title).fields.select('InternalName')(),
+            { circuitKey: definition.title, maxAttempts: 2 }
+          );
+          const present: Set<string> = new Set(fields.map((f) => f.InternalName));
+          const missingFields: string[] = definition.fields
+            .map((f) => f.name)
+            .filter((name) => !present.has(name));
+          if (missingFields.length === 0) {
+            return undefined;
+          }
+          return { list: definition.title, missingList: false, missingFields, error: '' };
+        } catch (err) {
+          const status: number =
+            typeof err === 'object' && err !== null && 'status' in err
+              ? Number((err as { status: unknown }).status)
+              : 0;
+          return {
+            list: definition.title,
+            missingList: status === 404,
+            missingFields: [],
+            error: err instanceof Error ? err.message : String(err)
+          };
+        }
+      })
+    );
+    return {
+      gaps: results.filter((g): g is ISchemaGap => g !== undefined),
+      checkedLists: UPC_LIST_DEFINITIONS.length
+    };
   }
 }

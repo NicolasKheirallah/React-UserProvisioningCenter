@@ -458,6 +458,12 @@ declare interface IUpcStrings {
   CopyLabel: string;
   CopiedLabel: string;
   CredentialDialogConfirm: string;
+  SlowLoadTitle: string;
+  SlowLoadBody: string;
+  SchemaGapTitle: string;
+  SchemaGapIntro: string;
+  SchemaGapMissingList: string;
+  SchemaGapMissingColumns: string;
 }
 
 declare module 'UpcStrings' {

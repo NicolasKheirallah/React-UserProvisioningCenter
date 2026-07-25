@@ -16,4 +16,9 @@ export class AppAuthorizationService implements IAuthorizationService {
       throw new AuthorizationError(permission);
     }
   }
+
+  public async has(permission: AppPermission): Promise<boolean> {
+    const resolved = await this._roles.getResolvedRoles();
+    return resolved.permissions.has(permission);
+  }
 }

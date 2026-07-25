@@ -85,6 +85,8 @@ export class MockData {
     modifiedUtc: '2026-01-01T00:00:00Z'
   });
 
+  public getJobStatus = async (_itemId: number): Promise<JobStatus> => this.status;
+
   public updateJobStatus = async (_itemId: number, status: JobStatus, _etag?: string): Promise<string> => {
     this.status = status;
     return '*';
@@ -131,6 +133,9 @@ export class AllowAllAuth implements IAuthorizationService {
     if (this.denied.has(permission)) {
       throw new Error(`Operation requires permission: ${permission}`);
     }
+  }
+  public async has(permission: AppPermission): Promise<boolean> {
+    return !this.denied.has(permission);
   }
 }
 
@@ -209,7 +214,7 @@ export function makeHarness(status: JobStatus, steps?: IJobStep[], payload?: IJo
       operatorUpn: 'operator@contoso.com',
       operatorDisplayName: 'Operator'
     },
-    { stepBackoffBaseMs: 1 }
+    { stepBackoffBaseMs: 1, cancelPollMinMs: 0 }
   );
   void jobType;
   return { engine, graph, data, auth, credentials: [] };

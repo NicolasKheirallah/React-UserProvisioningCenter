@@ -477,6 +477,12 @@ define([], function () {
       'This value is shown only once and is not stored anywhere. Copy it now and hand it over securely to the manager.',
     CopyLabel: 'Copy',
     CopiedLabel: 'Copied',
-    CredentialDialogConfirm: 'I have stored it securely'
+    CredentialDialogConfirm: 'I have stored it securely',
+    SlowLoadTitle: 'This is taking longer than usual',
+    SlowLoadBody: 'The request has not completed yet. It may be blocked, or a UPC list or column may be missing. Try again, or run Provision lists from the web part properties.',
+    SchemaGapTitle: 'UPC lists are out of date',
+    SchemaGapIntro: 'Some lists or columns this version needs are missing. Open the web part properties and run Provision lists to repair them.',
+    SchemaGapMissingList: 'list not found',
+    SchemaGapMissingColumns: 'missing columns'
   };
 });

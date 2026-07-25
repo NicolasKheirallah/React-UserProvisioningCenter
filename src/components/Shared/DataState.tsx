@@ -39,21 +39,25 @@ export interface IDataStateProps {
   emptyBody?: string;
   emptyAction?: React.ReactNode;
   onRetry?: () => void;
+  slowAfterMs?: number;
   children?: React.ReactNode;
 }
 
+const DEFAULT_SLOW_AFTER_MS: number = 15_000;
+
 export const DataState: React.FC<IDataStateProps> = (props) => {
   const styles = useStyles();
+  const slowAfterMs: number = props.slowAfterMs ?? DEFAULT_SLOW_AFTER_MS;
+  const [isSlow, setIsSlow] = React.useState<boolean>(false);
 
-  if (props.isLoading) {
-    return (
-      <Skeleton aria-label={strings.LoadingLabel} className={styles.skeleton}>
-        <SkeletonItem size={24} />
-        <SkeletonItem size={24} />
-        <SkeletonItem size={24} />
-      </Skeleton>
-    );
-  }
+  React.useEffect(() => {
+    if (!props.isLoading) {
+      setIsSlow(false);
+      return undefined;
+    }
+    const timer: number = window.setTimeout(() => setIsSlow(true), slowAfterMs);
+    return () => window.clearTimeout(timer);
+  }, [props.isLoading, slowAfterMs]);
 
   if (props.error) {
     const correlationId: string =
@@ -78,6 +82,31 @@ export const DataState: React.FC<IDataStateProps> = (props) => {
           </MessageBarActions>
         ) : undefined}
       </MessageBar>
+    );
+  }
+
+  if (props.isLoading) {
+    return (
+      <div>
+        {isSlow ? (
+          <MessageBar intent="warning" layout="multiline">
+            <MessageBarBody>
+              <MessageBarTitle>{strings.SlowLoadTitle}</MessageBarTitle>
+              {strings.SlowLoadBody}
+            </MessageBarBody>
+            {props.onRetry ? (
+              <MessageBarActions>
+                <Button onClick={props.onRetry}>{strings.RetryLabel}</Button>
+              </MessageBarActions>
+            ) : undefined}
+          </MessageBar>
+        ) : undefined}
+        <Skeleton aria-label={strings.LoadingLabel} className={styles.skeleton}>
+          <SkeletonItem size={24} />
+          <SkeletonItem size={24} />
+          <SkeletonItem size={24} />
+        </Skeleton>
+      </div>
     );
   }
 

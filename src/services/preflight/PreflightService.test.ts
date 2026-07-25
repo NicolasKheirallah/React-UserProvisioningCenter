@@ -1,7 +1,7 @@
 import { PreflightService, REQUIRED_GRAPH_SCOPES } from './PreflightService';
 import type { GraphService } from '../graph/GraphService';
 import type { SharePointDataService } from '../sharePointData/SharePointDataService';
-import type { ICapabilityCheck } from '../../models';
+import type { ICapabilityCheck, ISchemaValidationResult } from '../../models';
 import { GraphServiceError } from '../graph/GraphError';
 
 describe('PreflightService', () => {
@@ -42,10 +42,13 @@ describe('PreflightService', () => {
   function makeData(overrides?: {
     getRoleDefinitions?: () => Promise<unknown[]>;
     probeWriteAccess?: () => Promise<boolean>;
+    validateSchema?: () => Promise<ISchemaValidationResult>;
   }): SharePointDataService {
     return {
       getRoleDefinitions: overrides?.getRoleDefinitions ?? (async () => []),
-      probeWriteAccess: overrides?.probeWriteAccess ?? (async () => true)
+      probeWriteAccess: overrides?.probeWriteAccess ?? (async () => true),
+      validateSchema:
+        overrides?.validateSchema ?? (async () => ({ gaps: [], checkedLists: 11 }))
     } as unknown as SharePointDataService;
   }
 
@@ -102,6 +105,101 @@ describe('PreflightService', () => {
     expect(missing.has('groupMemberRead')).toBe(true);
     expect(missing.has('createUsers')).toBe(true);
     expect(missing.has('assignLicenses')).toBe(true);
+  });
+
+  it('fails schemaValid and names the missing columns when a list is out of date', async () => {
+    const { graph, getHandlers, postHandlers, batchHandlers } = makeGraph();
+    getHandlers['/me?$select=userPrincipalName'] = () => ({ userPrincipalName: 'admin@contoso.com' });
+    getHandlers['/me/memberOf/microsoft.graph.directoryRole?$select=displayName,roleTemplateId'] = () => ({
+      value: [{ roleTemplateId: '62e90394-69f5-4237-9190-012177145e10' }]
+    });
+    batchHandlers.org = () => ({ status: 200, body: {} });
+    batchHandlers.skus = () => ({ status: 200, body: {} });
+    batchHandlers.users = () => ({ status: 200, body: {} });
+    postHandlers['/me/checkMemberGroups'] = () => ({ value: [] });
+
+    const service = new PreflightService(
+      graph,
+      makeData({
+        validateSchema: async () => ({
+          checkedLists: 11,
+          gaps: [
+            {
+              list: 'UPC_ProvisioningJobs',
+              missingList: false,
+              missingFields: ['TargetUpn', 'ApprovalsJson'],
+              error: ''
+            }
+          ]
+        })
+      })
+    );
+    const result = await service.run();
+
+    const schema = result.checks.find((c) => c.capability === 'schemaValid');
+    expect(schema?.ok).toBe(false);
+    expect(schema?.detail).toContain('TargetUpn');
+    expect(schema?.detail).toContain('ApprovalsJson');
+    expect(result.schemaGaps).toHaveLength(1);
+    expect(result.missing.some((c) => c.capability === 'schemaValid')).toBe(true);
+  });
+
+  it('reports a missing list distinctly from missing columns', async () => {
+    const { graph, getHandlers, postHandlers, batchHandlers } = makeGraph();
+    getHandlers['/me?$select=userPrincipalName'] = () => ({ userPrincipalName: 'admin@contoso.com' });
+    getHandlers['/me/memberOf/microsoft.graph.directoryRole?$select=displayName,roleTemplateId'] = () => ({
+      value: [{ roleTemplateId: '62e90394-69f5-4237-9190-012177145e10' }]
+    });
+    batchHandlers.org = () => ({ status: 200, body: {} });
+    batchHandlers.skus = () => ({ status: 200, body: {} });
+    batchHandlers.users = () => ({ status: 200, body: {} });
+    postHandlers['/me/checkMemberGroups'] = () => ({ value: [] });
+
+    const service = new PreflightService(
+      graph,
+      makeData({
+        validateSchema: async () => ({
+          checkedLists: 11,
+          gaps: [
+            { list: 'UPC_ApprovalDelegations', missingList: true, missingFields: [], error: 'not found' }
+          ]
+        })
+      })
+    );
+    const result = await service.run();
+
+    const schema = result.checks.find((c) => c.capability === 'schemaValid');
+    expect(schema?.ok).toBe(false);
+    expect(schema?.detail).toContain('list not found');
+  });
+
+  it('does not run schema validation when the lists cannot be read at all', async () => {
+    const { graph, getHandlers, postHandlers, batchHandlers } = makeGraph();
+    getHandlers['/me?$select=userPrincipalName'] = () => ({ userPrincipalName: 'admin@contoso.com' });
+    getHandlers['/me/memberOf/microsoft.graph.directoryRole?$select=displayName,roleTemplateId'] = () => ({
+      value: []
+    });
+    batchHandlers.org = () => ({ status: 200, body: {} });
+    batchHandlers.skus = () => ({ status: 200, body: {} });
+    batchHandlers.users = () => ({ status: 200, body: {} });
+    postHandlers['/me/checkMemberGroups'] = () => ({ value: [] });
+
+    let called: boolean = false;
+    const service = new PreflightService(
+      graph,
+      makeData({
+        getRoleDefinitions: async () => {
+          throw new Error('unreadable');
+        },
+        validateSchema: async () => {
+          called = true;
+          return { gaps: [], checkedLists: 11 };
+        }
+      })
+    );
+    await service.run();
+
+    expect(called).toBe(false);
   });
 
   it('flags groupMemberRead ok for non-403 errors (permission is consented)', async () => {

@@ -7,9 +7,18 @@ import type { SiteAccessService } from '../sites/SiteAccessService';
 import type { TelemetryService } from '../telemetry/TelemetryService';
 import { GraphServiceError, RequestAbortedError } from '../graph/GraphError';
 import type { IAuthorizationService } from './IAuthorizationService';
+import { AuthorizationError } from './AuthorizationError';
 import { generateTempPassword } from '../passwords/passwordGenerator';
 import { newGuid } from '../util/guid';
-import type { IAppSettings, IJobStep, IProvisioningJob, JobType } from '../../models';
+import type {
+  AppPermission,
+  IAppSettings,
+  IApprovalDelegation,
+  IDepartmentTemplate,
+  IJobStep,
+  IProvisioningJob,
+  JobType
+} from '../../models';
 import { DEFAULT_APP_SETTINGS, isOnboardingPayload } from '../../models';
 import { assertTransition, canStartJob } from './jobStateMachine';
 import { stepsForJobType } from './stepRegistry';
@@ -43,6 +52,7 @@ export interface IEngineCallbacks {
 
 export interface IEngineOptions {
   stepBackoffBaseMs?: number;
+  cancelPollMinMs?: number;
 }
 
 export interface ICreateJobRequest {
@@ -64,11 +74,14 @@ export class WorkflowEngine {
   private readonly _backoffBaseMs: number;
   private readonly _runningItems: Set<number> = new Set();
   private readonly _pendingSkips: Map<number, Set<string>> = new Map();
+  private readonly _lastCancelCheck: Map<number, number> = new Map();
+  private readonly _cancelPollMinMs: number;
   private _settings: IAppSettings;
 
   public constructor(deps: IEngineDependencies, options?: IEngineOptions) {
     this._deps = deps;
     this._backoffBaseMs = options?.stepBackoffBaseMs ?? 1000;
+    this._cancelPollMinMs = options?.cancelPollMinMs ?? 3000;
     this._settings = deps.settings ?? DEFAULT_APP_SETTINGS;
   }
 
@@ -146,6 +159,7 @@ export class WorkflowEngine {
     } finally {
       this._runningItems.delete(itemId);
       this._pendingSkips.delete(itemId);
+      this._lastCancelCheck.delete(itemId);
     }
   }
 
@@ -178,6 +192,7 @@ export class WorkflowEngine {
     } finally {
       this._runningItems.delete(itemId);
       this._pendingSkips.delete(itemId);
+      this._lastCancelCheck.delete(itemId);
     }
   }
 
@@ -417,10 +432,15 @@ export class WorkflowEngine {
     };
 
     let blocked: boolean = false;
+    let cancelledRemotely: boolean = false;
     for (const definition of pipeline) {
       const state: IJobStep = job.steps.filter((s) => s.stepId === definition.id)[0];
       if (state.status === 'completed' || state.status === 'skipped') {
         continue;
+      }
+      if (await this._isCancelRequested(itemId)) {
+        cancelledRemotely = true;
+        break;
       }
       if (state.status === 'failed' && state.attempts >= state.maxAttempts) {
         if (!definition.continueOnFailure) {
@@ -443,6 +463,20 @@ export class WorkflowEngine {
         blocked = true;
         break;
       }
+    }
+
+    if (cancelledRemotely) {
+      job.status = 'Cancelled';
+      await this._deps.data.updateJobSteps(itemId, job.steps);
+      callbacks?.onJobUpdated?.(job);
+      if (this._deps.telemetry) {
+        this._deps.telemetry.trackEvent(
+          'engine.runJob.cancelledRemotely',
+          { jobId: job.jobId, jobType: job.jobType },
+          'warning'
+        );
+      }
+      return job;
     }
 
     const anyFailed: boolean = job.steps.some((s) => s.status === 'failed');
@@ -528,6 +562,20 @@ export class WorkflowEngine {
     return etag ?? '*';
   }
 
+  private async _isCancelRequested(itemId: number): Promise<boolean> {
+    const now: number = Date.now();
+    const last: number = this._lastCancelCheck.get(itemId) ?? 0;
+    if (now - last < this._cancelPollMinMs) {
+      return false;
+    }
+    this._lastCancelCheck.set(itemId, now);
+    try {
+      return (await this._deps.data.getJobStatus(itemId)) === 'Cancelled';
+    } catch {
+      return false;
+    }
+  }
+
   private _consumePendingSkip(itemId: number, stepId: string): boolean {
     const pending: Set<string> | undefined = this._pendingSkips.get(itemId);
     if (!pending || !pending.has(stepId)) {
@@ -544,5 +592,70 @@ export class WorkflowEngine {
     const newEtag = await this._deps.data.updateJobSteps(itemId, job.steps, etag);
     callbacks?.onJobUpdated?.(job);
     return newEtag;
+  }
+
+  public async completeTask(itemId: number): Promise<void> {
+    await this._deps.auth.require('manageTasks');
+    await this._deps.data.completeTask(itemId);
+  }
+
+  public async createTemplate(title: string, template: IDepartmentTemplate): Promise<number> {
+    await this._deps.auth.require('manageTemplates');
+    return this._deps.data.createTemplate(title, template);
+  }
+
+  public async updateTemplate(
+    itemId: number,
+    title: string,
+    template: IDepartmentTemplate,
+    currentVersion: number
+  ): Promise<void> {
+    await this._deps.auth.require('manageTemplates');
+    await this._deps.data.updateTemplate(itemId, title, template, currentVersion);
+  }
+
+  public async setTemplateActive(itemId: number, isActive: boolean): Promise<void> {
+    await this._deps.auth.require('manageTemplates');
+    await this._deps.data.setTemplateActive(itemId, isActive);
+  }
+
+  public async saveAppSettings(settings: IAppSettings): Promise<void> {
+    await this._deps.auth.require('manageSettings');
+    await this._deps.data.saveAppSettings(settings);
+    this._settings = settings;
+  }
+
+  public async updateRoleDefinition(
+    itemId: number,
+    memberGroupId: string,
+    permissions: AppPermission[]
+  ): Promise<void> {
+    await this._deps.auth.require('manageSettings');
+    await this._deps.data.updateRoleDefinition(itemId, memberGroupId, permissions);
+  }
+
+  public async createDelegation(delegation: Omit<IApprovalDelegation, 'itemId'>): Promise<number> {
+    await this._requireDelegationRights(delegation.delegatorUpn);
+    return this._deps.data.createDelegation(delegation);
+  }
+
+  public async revokeDelegation(itemId: number): Promise<void> {
+    const delegations: IApprovalDelegation[] = await this._deps.data.getAllDelegations();
+    const target: IApprovalDelegation | undefined = delegations.filter((d) => d.itemId === itemId)[0];
+    await this._requireDelegationRights(target?.delegatorUpn ?? '');
+    await this._deps.data.setDelegationActive(itemId, false);
+  }
+
+  private async _requireDelegationRights(delegatorUpn: string): Promise<void> {
+    const canManageAll: boolean = await this._deps.auth.has('manageDelegations');
+    if (canManageAll) {
+      return;
+    }
+    const isSelf: boolean =
+      !!delegatorUpn && delegatorUpn.toLowerCase() === this._deps.operatorUpn.toLowerCase();
+    if (!isSelf) {
+      throw new AuthorizationError('manageDelegations');
+    }
+    await this._deps.auth.require('approveJobs');
   }
 }

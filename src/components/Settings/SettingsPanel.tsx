@@ -83,7 +83,7 @@ export const SettingsPanel: React.FC = () => {
     setSaving(true);
     setSaveError(false);
     try {
-      await services.data.saveAppSettings(draft);
+      await services.engine.saveAppSettings(draft);
       await queryClient.invalidateQueries(QK_SETTINGS);
       toast(strings.SettingsSavedToast);
     } catch {

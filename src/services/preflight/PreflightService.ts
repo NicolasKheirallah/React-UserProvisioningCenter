@@ -2,7 +2,7 @@ import { batchTyped, type GraphService } from '../graph/GraphService';
 import { GraphServiceError } from '../graph/GraphError';
 import type { SharePointDataService } from '../sharePointData/SharePointDataService';
 import type { TelemetryService } from '../telemetry/TelemetryService';
-import type { CapabilityId, ICapabilityCheck, IPreflightResult } from '../../models';
+import type { CapabilityId, ICapabilityCheck, IPreflightResult, ISchemaGap } from '../../models';
 
 export const REQUIRED_GRAPH_SCOPES: string[] = [
   'User.ReadWrite.All',
@@ -159,6 +159,33 @@ export class PreflightService {
         ok: sharePointWriteOk
       });
 
+      let schemaGaps: ISchemaGap[] = [];
+      if (sharePointReadOk) {
+        try {
+          const schema = await this._data.validateSchema();
+          schemaGaps = schema.gaps;
+        } catch {
+          schemaGaps = [];
+        }
+      }
+      checks.push({
+        capability: 'schemaValid',
+        label: 'UPC list columns are up to date',
+        detail:
+          schemaGaps.length > 0
+            ? `Missing or unreadable: ${schemaGaps
+                .map((g) =>
+                  g.missingList
+                    ? `${g.list} (list not found)`
+                    : g.missingFields.length > 0
+                      ? `${g.list} (${g.missingFields.join(', ')})`
+                      : `${g.list} (${g.error})`
+                )
+                .join('; ')}. Run Provision lists from the web part properties.`
+            : 'All UPC lists have the columns this version expects.',
+        ok: schemaGaps.length === 0
+      });
+
       let groupMemberReadOk: boolean = false;
       try {
         await this._graph.post<{ value: string[] }>(
@@ -199,7 +226,8 @@ export class PreflightService {
         missing: checks.filter((c) => !c.ok),
         directoryRoleTemplateIds: templateIds,
         operatorUpn: me.userPrincipalName,
-        requiredGraphScopes: REQUIRED_GRAPH_SCOPES
+        requiredGraphScopes: REQUIRED_GRAPH_SCOPES,
+        schemaGaps
       };
       if (this._telemetry) {
         this._telemetry.trackEvent(

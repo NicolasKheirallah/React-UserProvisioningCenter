@@ -139,7 +139,7 @@ export const TasksList: React.FC = () => {
   const complete = async (itemId: number): Promise<void> => {
     setCompletingId(itemId);
     try {
-      await services.data.completeTask(itemId);
+      await services.engine.completeTask(itemId);
       toast(strings.TaskCompletedToast);
     } catch {
       toast(strings.JobActionFailed, 'error');

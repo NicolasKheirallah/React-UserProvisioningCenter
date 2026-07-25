@@ -1,9 +1,11 @@
 import { delay } from './delay';
 import { ConcurrencyError } from './ConcurrencyError';
 import { CircuitBreaker, CircuitOpenError } from './circuitBreaker';
+import { TimeoutError, withTimeout } from './withTimeout';
 
 const DEFAULT_MAX_ATTEMPTS: number = 4;
 const BASE_BACKOFF_MS: number = 1000;
+export const DEFAULT_SHAREPOINT_TIMEOUT_MS: number = 30_000;
 
 export const sharePointCircuit: CircuitBreaker = new CircuitBreaker({
   failureThreshold: 5,
@@ -41,7 +43,12 @@ function isNetworkFailure(err: unknown): boolean {
 }
 
 export function isRetryableSharePointError(err: unknown): boolean {
-  if (isAbortError(err) || err instanceof ConcurrencyError || err instanceof CircuitOpenError) {
+  if (
+    isAbortError(err) ||
+    err instanceof ConcurrencyError ||
+    err instanceof CircuitOpenError ||
+    err instanceof TimeoutError
+  ) {
     return false;
   }
   if (hasStatus(err)) {
@@ -68,6 +75,7 @@ export interface ISharePointRetryOptions {
   signal?: AbortSignal;
   idempotent?: boolean;
   circuitKey?: string;
+  timeoutMs?: number;
 }
 
 export async function sharePointRetry<T>(
@@ -77,6 +85,8 @@ export async function sharePointRetry<T>(
   const maxAttempts: number = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const idempotent: boolean = options?.idempotent !== false;
   const circuitKey: string = options?.circuitKey ?? 'sharepoint';
+  const timeoutMs: number = options?.timeoutMs ?? DEFAULT_SHAREPOINT_TIMEOUT_MS;
+  const timedAction = (): Promise<T> => withTimeout(action, timeoutMs, circuitKey);
   let lastError: Error | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -84,7 +94,7 @@ export async function sharePointRetry<T>(
       throw new DOMException('SharePoint request aborted', 'AbortError');
     }
     try {
-      return await sharePointCircuit.execute(circuitKey, action, isRetryableSharePointError);
+      return await sharePointCircuit.execute(circuitKey, timedAction, isRetryableSharePointError);
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       if (

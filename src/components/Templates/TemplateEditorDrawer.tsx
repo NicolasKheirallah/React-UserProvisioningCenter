@@ -178,12 +178,12 @@ export const TemplateEditorDrawer: React.FC<ITemplateEditorDrawerProps> = ({
     };
     try {
       if (item) {
-        await services.data.updateTemplate(item.itemId, title.trim(), template, item.version);
+        await services.engine.updateTemplate(item.itemId, title.trim(), template, item.version);
         if (item.isActive !== isActive) {
-          await services.data.setTemplateActive(item.itemId, isActive);
+          await services.engine.setTemplateActive(item.itemId, isActive);
         }
       } else {
-        await services.data.createTemplate(title.trim(), template);
+        await services.engine.createTemplate(title.trim(), template);
       }
       await Promise.all([
         queryClient.invalidateQueries(QK_TEMPLATES),

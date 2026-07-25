@@ -477,6 +477,12 @@ define([], function () {
       'Värdet visas bara en gång och lagras ingenstans. Kopiera det nu och överlämna det säkert till chefen.',
     CopyLabel: 'Kopiera',
     CopiedLabel: 'Kopierat',
-    CredentialDialogConfirm: 'Jag har sparat den säkert'
+    CredentialDialogConfirm: 'Jag har sparat den säkert',
+    SlowLoadTitle: 'Det här tar längre tid än vanligt',
+    SlowLoadBody: 'Begäran har inte slutförts än. Den kan vara blockerad, eller så saknas en UPC-lista eller kolumn. Försök igen, eller kör Etablera listor från webbdelens egenskaper.',
+    SchemaGapTitle: 'UPC-listorna är inaktuella',
+    SchemaGapIntro: 'Några listor eller kolumner som den här versionen behöver saknas. Öppna webbdelens egenskaper och kör Etablera listor för att reparera dem.',
+    SchemaGapMissingList: 'listan hittades inte',
+    SchemaGapMissingColumns: 'saknade kolumner'
   };
 });

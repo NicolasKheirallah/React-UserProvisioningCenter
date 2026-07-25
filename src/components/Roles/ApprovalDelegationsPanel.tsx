@@ -102,7 +102,7 @@ export const ApprovalDelegationsPanel: React.FC<IApprovalDelegationsPanelProps> 
     }
     setSaving(true);
     try {
-      await services.data.createDelegation({
+      await services.engine.createDelegation({
         delegatorUpn: services.operatorUpn,
         delegateUpn: delegateUpn.trim(),
         startUtc: startUtc ? `${startUtc}T00:00:00Z` : null,
@@ -125,7 +125,7 @@ export const ApprovalDelegationsPanel: React.FC<IApprovalDelegationsPanelProps> 
 
   const revoke = async (itemId: number): Promise<void> => {
     try {
-      await services.data.setDelegationActive(itemId, false);
+      await services.engine.revokeDelegation(itemId);
       await queryClient.invalidateQueries(QK_DELEGATIONS);
       toast(strings.DelegationRevokedToast);
     } catch {

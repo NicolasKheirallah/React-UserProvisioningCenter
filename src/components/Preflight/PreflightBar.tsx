@@ -36,19 +36,47 @@ export const PreflightBar: React.FC = () => {
   if (!preflight.data || preflight.data.missing.length === 0) {
     return null;
   }
+
+  const schemaGaps = preflight.data.schemaGaps ?? [];
+  const capabilityGaps = preflight.data.missing.filter((c) => c.capability !== 'schemaValid');
+
   return (
-    <MessageBar intent="warning" layout="multiline">
-      <MessageBarBody>
-        <MessageBarTitle>{strings.PreflightMissingTitle}</MessageBarTitle>
-        {strings.PreflightMissingIntro}
-        <ul className={styles.list}>
-          {preflight.data.missing.map((check) => (
-            <li key={check.capability}>
-              <strong>{check.label}</strong> — {check.detail}
-            </li>
-          ))}
-        </ul>
-      </MessageBarBody>
-    </MessageBar>
+    <>
+      {schemaGaps.length > 0 ? (
+        <MessageBar intent="error" layout="multiline">
+          <MessageBarBody>
+            <MessageBarTitle>{strings.SchemaGapTitle}</MessageBarTitle>
+            {strings.SchemaGapIntro}
+            <ul className={styles.list}>
+              {schemaGaps.map((gap) => (
+                <li key={gap.list}>
+                  <strong>{gap.list}</strong>
+                  {gap.missingList
+                    ? ` — ${strings.SchemaGapMissingList}`
+                    : gap.missingFields.length > 0
+                      ? ` — ${strings.SchemaGapMissingColumns}: ${gap.missingFields.join(', ')}`
+                      : ` — ${gap.error}`}
+                </li>
+              ))}
+            </ul>
+          </MessageBarBody>
+        </MessageBar>
+      ) : undefined}
+      {capabilityGaps.length > 0 ? (
+        <MessageBar intent="warning" layout="multiline">
+          <MessageBarBody>
+            <MessageBarTitle>{strings.PreflightMissingTitle}</MessageBarTitle>
+            {strings.PreflightMissingIntro}
+            <ul className={styles.list}>
+              {capabilityGaps.map((check) => (
+                <li key={check.capability}>
+                  <strong>{check.label}</strong> — {check.detail}
+                </li>
+              ))}
+            </ul>
+          </MessageBarBody>
+        </MessageBar>
+      ) : undefined}
+    </>
   );
 };

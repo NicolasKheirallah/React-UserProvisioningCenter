@@ -132,7 +132,7 @@ const RoleCard: React.FC<IRoleCardProps> = ({ item, onSaved }) => {
   const save = async (): Promise<void> => {
     setSaving(true);
     try {
-      await services.data.updateRoleDefinition(item.itemId, memberGroupId.trim(), Array.from(permissions));
+      await services.engine.updateRoleDefinition(item.itemId, memberGroupId.trim(), Array.from(permissions));
       await queryClient.invalidateQueries(QK_ROLES);
       await queryClient.invalidateQueries(QK_APP_ROLES);
       toast(strings.RolesSavedToast);

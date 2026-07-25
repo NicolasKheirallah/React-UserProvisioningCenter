@@ -146,6 +146,35 @@ describe('WorkflowEngine', () => {
     await first;
   });
 
+  it('stops mid-pipeline when another session cancels the job', async () => {
+    const h: IHarness = makeHarness('Approved');
+    happyPathHandlers(h.graph);
+
+    const originalGetStatus = h.data.getJobStatus;
+    let probes: number = 0;
+    h.data.getJobStatus = async (itemId: number) => {
+      probes++;
+      if (probes > 1) {
+        return 'Cancelled';
+      }
+      return originalGetStatus(itemId);
+    };
+
+    const job: IProvisioningJob = await h.engine.runJob(1, { presentCredentials: async () => undefined });
+
+    expect(job.status).toBe('Cancelled');
+    expect(job.steps.some((s) => s.status === 'pending')).toBe(true);
+  });
+
+  it('runs to completion when no cancellation is requested', async () => {
+    const h: IHarness = makeHarness('Approved');
+    happyPathHandlers(h.graph);
+
+    const job: IProvisioningJob = await h.engine.runJob(1, { presentCredentials: async () => undefined });
+
+    expect(job.status).toBe('Completed');
+  });
+
   it('skipStep refuses non-skippable steps', async () => {
     const h: IHarness = makeHarness('PartiallyFailed');
     const failed: IJobStep = {
