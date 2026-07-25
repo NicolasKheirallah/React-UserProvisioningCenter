@@ -63,9 +63,8 @@ function makeChain(returnValue: unknown[], capture: ICapture): unknown {
     ...chain,
     update: async (_payload: unknown): Promise<{ 'odata.etag': string }> => ({ 'odata.etag': '"1"' })
   });
-  const pageSize: number = capture.top ?? (returnValue.length || 1);
   (chain as Record<PropertyKey, unknown>)[Symbol.asyncIterator] = (): AsyncIterator<unknown[]> =>
-    asyncIterableOf(returnValue, pageSize)[Symbol.asyncIterator]();
+    asyncIterableOf(returnValue, capture.top ?? (returnValue.length || 1))[Symbol.asyncIterator]();
   return chain;
 }
 

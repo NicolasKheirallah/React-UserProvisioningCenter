@@ -277,13 +277,6 @@ async function batchAddGroupMembers(ctx: IStepContext, userId: string, groupIds:
   return failed;
 }
 
-async function addGroupMember(ctx: IStepContext, groupId: string, userId: string, action: string): Promise<void> {
-  const body = { '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${userId}` };
-  await auditedGraphWrite(ctx, action, 'POST', `/groups/${groupId}/members/$ref`, body, () =>
-    ctx.graph.post<void>(`/groups/${groupId}/members/$ref`, body, { signal: ctx.signal })
-  );
-}
-
 async function runAssignGroups(ctx: IStepContext): Promise<void> {
   const payload = onboarding(ctx);
   const groupIds: string[] = [...payload.access.securityGroups, ...payload.access.m365Groups];

@@ -326,7 +326,13 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
         ) : undefined}
         {truncated && !hasActiveFilters ? (
           <div className={styles.loadMoreRow}>
-            <Button appearance="secondary" disabled={isLoadingMore} onClick={() => void loadMore()}>
+            <Button
+              appearance="secondary"
+              disabled={isLoadingMore}
+              onClick={() => {
+                void loadMore();
+              }}
+            >
               {isLoadingMore ? strings.LoadingLabel : strings.LoadMoreLabel}
             </Button>
           </div>

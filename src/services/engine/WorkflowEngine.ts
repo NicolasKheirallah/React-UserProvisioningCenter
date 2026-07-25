@@ -123,31 +123,29 @@ export class WorkflowEngine {
     if (this._runningItems.has(itemId)) {
       throw new Error(`Job ${itemId} is already running in this session`);
     }
-    await this._deps.auth.require('runJobs');
+    this._runningItems.add(itemId);
     const started: number = Date.now();
     try {
+      await this._deps.auth.require('runJobs');
       return await this._withLock(itemId, async (_instanceId, etag) => {
-        this._runningItems.add(itemId);
-        try {
-          const job: IProvisioningJob = await this._execute(itemId, callbacks, signal, etag);
-          if (this._deps.telemetry) {
-            this._deps.telemetry.trackEvent(
-              'engine.runJob.complete',
-              { jobId: job.jobId, jobType: job.jobType, status: job.status, durationMs: Date.now() - started },
-              job.status === 'Completed' ? 'info' : 'warning'
-            );
-          }
-          return job;
-        } finally {
-          this._runningItems.delete(itemId);
-          this._pendingSkips.delete(itemId);
+        const job: IProvisioningJob = await this._execute(itemId, callbacks, signal, etag);
+        if (this._deps.telemetry) {
+          this._deps.telemetry.trackEvent(
+            'engine.runJob.complete',
+            { jobId: job.jobId, jobType: job.jobType, status: job.status, durationMs: Date.now() - started },
+            job.status === 'Completed' ? 'info' : 'warning'
+          );
         }
+        return job;
       });
     } catch (err) {
       if (this._deps.telemetry && !(err instanceof RequestAbortedError)) {
         this._deps.telemetry.trackError(err, { jobId: String(itemId), durationMs: Date.now() - started });
       }
       throw err;
+    } finally {
+      this._runningItems.delete(itemId);
+      this._pendingSkips.delete(itemId);
     }
   }
 
@@ -160,10 +158,10 @@ export class WorkflowEngine {
     if (this._runningItems.has(itemId)) {
       throw new Error(`Job ${itemId} is currently running — wait for it to finish before retrying a step`);
     }
-    await this._deps.auth.require('retrySteps');
-    return this._withLock(itemId, async (_instanceId, lockEtag) => {
-      this._runningItems.add(itemId);
-      try {
+    this._runningItems.add(itemId);
+    try {
+      await this._deps.auth.require('retrySteps');
+      return await this._withLock(itemId, async (_instanceId, lockEtag) => {
         const job: IProvisioningJob = await this._deps.data.getJob(itemId);
         const step: IJobStep | undefined = job.steps.filter((s) => s.stepId === stepId)[0];
         if (!step || step.status !== 'failed') {
@@ -176,11 +174,11 @@ export class WorkflowEngine {
         step.completedUtc = null;
         const etag: string = await this._deps.data.updateJobSteps(itemId, job.steps, lockEtag);
         return await this._execute(itemId, callbacks, signal, etag);
-      } finally {
-        this._runningItems.delete(itemId);
-        this._pendingSkips.delete(itemId);
-      }
-    });
+      });
+    } finally {
+      this._runningItems.delete(itemId);
+      this._pendingSkips.delete(itemId);
+    }
   }
 
   public async skipStep(

@@ -246,7 +246,7 @@ export class SharePointDataService {
     return this._currentUser;
   }
 
-  private _jobs() {
+  private _jobs(): ReturnType<SPFI['web']['lists']['getByTitle']> {
     return this._sp.web.lists.getByTitle(LIST_PROVISIONING_JOBS);
   }
 
