@@ -483,6 +483,22 @@ define([], function () {
     SchemaGapMissingList: 'list not found',
     SchemaGapMissingColumns: 'missing columns',
     JobStalledLabel: 'Stalled',
-    JobStalledTooltip: 'This job has been marked Running for longer than expected. The browser session that started it may have closed. Run it again to take over.'
+    JobStalledTooltip: 'This job has been marked Running for longer than expected. The browser session that started it may have closed. Run it again to take over.',
+    TabAudit: 'Audit log',
+    AuditTableCaption: 'Audit entries, newest first',
+    AuditColumnTime: 'Time',
+    AuditColumnTarget: 'Target user',
+    AuditColumnCode: 'Code',
+    AuditColumnDuration: 'Duration (ms)',
+    AuditColumnJob: 'Job id',
+    AuditFilterActorPlaceholder: 'Filter by actor',
+    AuditFilterTargetPlaceholder: 'Filter by target user',
+    AuditFilterJobPlaceholder: 'Filter by job id',
+    AuditFilterFromLabel: 'From',
+    AuditFilterToLabel: 'To',
+    AuditEmptyTitle: 'No audit entries yet',
+    AuditEmptyBody: 'Entries appear here as soon as jobs start writing to Microsoft 365.',
+    AuditNoMatches: 'No audit entries match these filters.',
+    AuditLoadFailed: 'Could not load more audit entries.'
   };
 });

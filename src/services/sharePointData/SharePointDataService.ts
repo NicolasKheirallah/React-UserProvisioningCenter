@@ -25,6 +25,7 @@ import { sharePointRetry } from '../util/sharePointRetry';
 import { ConcurrencyError } from '../util/ConcurrencyError';
 import { JobConflictError, isEtagConflict } from '../util/JobConflictError';
 import { buildJobFilter } from '../util/jobFilter';
+import { buildAuditFilter } from '../util/auditFilter';
 import type { IPagedResult } from '../util/pagedQuery';
 import { fetchPaged } from '../util/pagedQuery';
 import { assertTransition } from '../engine/jobStateMachine';
@@ -39,6 +40,7 @@ import type {
   IApprovalDelegation,
   IApprovalRecord,
   IAuditEntry,
+  IAuditQuery,
   IDepartmentTemplate,
   IJobPayload,
   IJobQuery,
@@ -196,6 +198,53 @@ function parseJobSummary(item: IJobSummaryListItem): IJobSummary {
     createdUtc: item.Created ?? null,
     modifiedUtc: item.Modified ?? null,
     runningSince: item.RunningSince ?? null
+  };
+}
+
+interface IAuditListItem {
+  Title: string;
+  JobId: string;
+  Actor: string | null;
+  Action: string;
+  TargetUser: string | null;
+  GraphEndpoint: string | null;
+  RequestSummary: string | null;
+  ResponseCode: number | null;
+  DurationMs: number | null;
+  Result: AuditResult;
+  CorrelationId: string | null;
+  TimestampUtc: string | null;
+}
+
+const AUDIT_SELECT: string[] = [
+  'Title',
+  'JobId',
+  'Actor',
+  'Action',
+  'TargetUser',
+  'GraphEndpoint',
+  'RequestSummary',
+  'ResponseCode',
+  'DurationMs',
+  'Result',
+  'CorrelationId',
+  'TimestampUtc'
+];
+
+function parseAuditEntry(i: IAuditListItem): IAuditEntry {
+  return {
+    entryId: i.Title,
+    jobId: i.JobId,
+    actor: i.Actor ?? '',
+    action: i.Action,
+    targetUser: i.TargetUser ?? '',
+    graphEndpoint: i.GraphEndpoint ?? '',
+    requestSummary: i.RequestSummary ?? '',
+    responseCode: i.ResponseCode ?? 0,
+    durationMs: i.DurationMs ?? 0,
+    result: i.Result,
+    correlationId: i.CorrelationId ?? '',
+    timestampUtc: i.TimestampUtc ?? ''
   };
 }
 
@@ -561,56 +610,44 @@ export class SharePointDataService {
 
   public async getAuditEntries(jobId: string, top: number = 100): Promise<IAuditEntry[]> {
     const literal: string = escapeODataLiteral(jobId);
-    const items: {
-      Title: string;
-      JobId: string;
-      Actor: string | null;
-      Action: string;
-      TargetUser: string | null;
-      GraphEndpoint: string | null;
-      RequestSummary: string | null;
-      ResponseCode: number | null;
-      DurationMs: number | null;
-      Result: AuditResult;
-      CorrelationId: string | null;
-      TimestampUtc: string | null;
-    }[] = await sharePointRetry(
+    const items: IAuditListItem[] = await sharePointRetry(
       () =>
         this._sp.web.lists
           .getByTitle(LIST_AUDIT_LOG)
-          .items.select(
-            'Title',
-            'JobId',
-            'Actor',
-            'Action',
-            'TargetUser',
-            'GraphEndpoint',
-            'RequestSummary',
-            'ResponseCode',
-            'DurationMs',
-            'Result',
-            'CorrelationId',
-            'TimestampUtc'
-          )
+          .items.select(...AUDIT_SELECT)
           .filter(`JobId eq '${literal}'`)
           .orderBy('Id', true)
           .top(top)(),
       { circuitKey: LIST_AUDIT_LOG }
     );
-    return items.map((i) => ({
-      entryId: i.Title,
-      jobId: i.JobId,
-      actor: i.Actor ?? '',
-      action: i.Action,
-      targetUser: i.TargetUser ?? '',
-      graphEndpoint: i.GraphEndpoint ?? '',
-      requestSummary: i.RequestSummary ?? '',
-      responseCode: i.ResponseCode ?? 0,
-      durationMs: i.DurationMs ?? 0,
-      result: i.Result,
-      correlationId: i.CorrelationId ?? '',
-      timestampUtc: i.TimestampUtc ?? ''
-    }));
+    return items.map(parseAuditEntry);
+  }
+
+  public async searchAuditEntries(query?: IAuditQuery): Promise<IPagedResult<IAuditEntry>> {
+    const top: number = query?.top ?? 200;
+    const filter: string = buildAuditFilter(query);
+    let request = this._sp.web.lists
+      .getByTitle(LIST_AUDIT_LOG)
+      .items.select(...AUDIT_SELECT)
+      .orderBy('Id', false)
+      .top(top);
+    if (filter) {
+      request = request.filter(filter);
+    }
+    const iterableRequest = request as unknown as AsyncIterable<IAuditListItem[]>;
+    const page = await fetchPaged<IAuditListItem>(iterableRequest, top, (action) =>
+      sharePointRetry(action, { circuitKey: LIST_AUDIT_LOG })
+    );
+    return {
+      items: page.items.map(parseAuditEntry),
+      truncated: page.truncated,
+      next: page.next
+        ? async () => {
+            const nextPage = await page.next!();
+            return { items: nextPage.items.map(parseAuditEntry), truncated: nextPage.truncated };
+          }
+        : undefined
+    };
   }
 
   public async getRoleDefinitions(): Promise<IRoleDefinition[]> {

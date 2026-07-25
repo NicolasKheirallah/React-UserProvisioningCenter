@@ -464,6 +464,22 @@ declare interface IUpcStrings {
   SchemaGapMissingColumns: string;
   JobStalledLabel: string;
   JobStalledTooltip: string;
+  TabAudit: string;
+  AuditTableCaption: string;
+  AuditColumnTime: string;
+  AuditColumnTarget: string;
+  AuditColumnCode: string;
+  AuditColumnDuration: string;
+  AuditColumnJob: string;
+  AuditFilterActorPlaceholder: string;
+  AuditFilterTargetPlaceholder: string;
+  AuditFilterJobPlaceholder: string;
+  AuditFilterFromLabel: string;
+  AuditFilterToLabel: string;
+  AuditEmptyTitle: string;
+  AuditEmptyBody: string;
+  AuditNoMatches: string;
+  AuditLoadFailed: string;
 }
 
 declare module 'UpcStrings' {

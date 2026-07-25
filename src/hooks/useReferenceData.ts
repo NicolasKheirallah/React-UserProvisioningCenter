@@ -4,6 +4,7 @@ import { useServices } from '../contexts/ServicesContext';
 import {
   QK_APP_ROLES,
   QK_APPLICATION_CATALOG,
+  QK_AUDIT_SEARCH,
   QK_DELEGATIONS,
   QK_JOB_CHANGE_TOKEN,
   QK_JOB_DETAIL,
@@ -21,6 +22,8 @@ import {
 import type {
   IApplicationCatalogItem,
   IApprovalDelegation,
+  IAuditEntry,
+  IAuditQuery,
   IJobQuery,
   IJobSummary,
   ILicenseOption,
@@ -157,6 +160,18 @@ export function useJobDetail(itemId: number | null, pollWhileRunning: boolean): 
     {
       enabled: itemId !== null,
       refetchInterval: pollWhileRunning && visible ? CHANGE_TOKEN_POLL_MS : false
+    }
+  );
+}
+
+export function useAuditSearch(query: IAuditQuery, enabled: boolean): UseQueryResult<IPagedResult<IAuditEntry>> {
+  const services = useServices();
+  return useQuery(
+    [...QK_AUDIT_SEARCH, JSON.stringify(query)],
+    () => services.data.searchAuditEntries(query),
+    {
+      enabled,
+      staleTime: OPERATIONAL_STALE_MS
     }
   );
 }

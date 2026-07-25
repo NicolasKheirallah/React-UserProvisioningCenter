@@ -483,6 +483,22 @@ define([], function () {
     SchemaGapMissingList: 'listan hittades inte',
     SchemaGapMissingColumns: 'saknade kolumner',
     JobStalledLabel: 'Avstannat',
-    JobStalledTooltip: 'Det här jobbet har varit markerat som Kör längre än förväntat. Webbläsarsessionen som startade det kan ha stängts. Kör det igen för att ta över.'
+    JobStalledTooltip: 'Det här jobbet har varit markerat som Kör längre än förväntat. Webbläsarsessionen som startade det kan ha stängts. Kör det igen för att ta över.',
+    TabAudit: 'Granskningslogg',
+    AuditTableCaption: 'Granskningsposter, nyaste först',
+    AuditColumnTime: 'Tid',
+    AuditColumnTarget: 'Målanvändare',
+    AuditColumnCode: 'Kod',
+    AuditColumnDuration: 'Varaktighet (ms)',
+    AuditColumnJob: 'Jobb-id',
+    AuditFilterActorPlaceholder: 'Filtrera på utförare',
+    AuditFilterTargetPlaceholder: 'Filtrera på målanvändare',
+    AuditFilterJobPlaceholder: 'Filtrera på jobb-id',
+    AuditFilterFromLabel: 'Från',
+    AuditFilterToLabel: 'Till',
+    AuditEmptyTitle: 'Inga granskningsposter än',
+    AuditEmptyBody: 'Poster visas här så snart jobb börjar skriva till Microsoft 365.',
+    AuditNoMatches: 'Inga granskningsposter matchar filtren.',
+    AuditLoadFailed: 'Kunde inte läsa in fler granskningsposter.'
   };
 });

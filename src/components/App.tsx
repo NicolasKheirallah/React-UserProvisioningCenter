@@ -54,6 +54,9 @@ const SettingsPanel = React.lazy(() =>
 const RolesPanel = React.lazy(() =>
   import(/* webpackChunkName: 'upc-roles' */ './Roles/RolesPanel').then((m) => ({ default: m.RolesPanel }))
 );
+const AuditLogPanel = React.lazy(() =>
+  import(/* webpackChunkName: 'upc-audit' */ './Audit/AuditLogPanel').then((m) => ({ default: m.AuditLogPanel }))
+);
 
 const useStyles = makeStyles({
   root: {
@@ -99,7 +102,8 @@ type ShellTab =
   | 'tasks'
   | 'templates'
   | 'settings'
-  | 'roles';
+  | 'roles'
+  | 'audit';
 
 const DraftBadge: React.FC<{ className: string }> = ({ className }) => (
   <Badge className={className} appearance="tint" color="brand" size="small">
@@ -128,6 +132,7 @@ const Shell: React.FC = () => {
   const canManageTasks: boolean = roles.data?.permissions.has('manageTasks') ?? false;
   const canManageSettings: boolean = roles.data?.permissions.has('manageSettings') ?? false;
   const canManageDelegations: boolean = roles.data?.permissions.has('manageDelegations') ?? false;
+  const canViewAudit: boolean = roles.data?.permissions.has('viewAudit') ?? false;
   const switchTab = (next: ShellTab): void => {
     startTabTransition(() => setTab(next));
   };
@@ -166,6 +171,7 @@ const Shell: React.FC = () => {
           {canManageTemplates ? <Tab value="templates">{strings.TabTemplates}</Tab> : undefined}
           {canManageSettings ? <Tab value="settings">{strings.TabSettings}</Tab> : undefined}
           {canManageSettings || canManageDelegations ? <Tab value="roles">{strings.TabRoles}</Tab> : undefined}
+          {canViewAudit ? <Tab value="audit">{strings.TabAudit}</Tab> : undefined}
         </TabList>
       </div>
       <div className={styles.progressSlot}>{isTabPending ? <ProgressBar aria-label={strings.LoadingLabel} /> : undefined}</div>
@@ -206,6 +212,11 @@ const Shell: React.FC = () => {
         {tab === 'roles' && (canManageSettings || canManageDelegations) ? (
           <React.Suspense fallback={<Spinner aria-label={strings.LoadingLabel} />}>
             <RolesPanel />
+          </React.Suspense>
+        ) : undefined}
+        {tab === 'audit' && canViewAudit ? (
+          <React.Suspense fallback={<Spinner aria-label={strings.LoadingLabel} />}>
+            <AuditLogPanel />
           </React.Suspense>
         ) : undefined}
       </AppErrorBoundary>

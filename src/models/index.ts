@@ -6,6 +6,7 @@ export * from './IOffboardingPayload';
 export * from './ITransferPayload';
 export * from './ILicense';
 export * from './IAudit';
+export * from './IAuditQuery';
 export * from './IRoles';
 export * from './IPreflight';
 export * from './INaming';

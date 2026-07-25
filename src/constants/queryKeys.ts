@@ -12,6 +12,7 @@ export const QK_TEMPLATES_ALL: string[] = ['sp', 'templates', 'all'];
 export const QK_TASKS: string[] = ['sp', 'tasks'];
 export const QK_SETTINGS: string[] = ['sp', 'settings'];
 export const QK_AUDIT: string[] = ['sp', 'audit'];
+export const QK_AUDIT_SEARCH: string[] = ['sp', 'auditSearch'];
 export const QK_TEAMS_CATALOG: string[] = ['sp', 'teamsCatalog'];
 export const QK_SITE_CATALOG: string[] = ['sp', 'siteCatalog'];
 export const QK_APPLICATION_CATALOG: string[] = ['sp', 'applicationCatalog'];
