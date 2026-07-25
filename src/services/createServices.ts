@@ -42,7 +42,7 @@ export async function createServices(context: WebPartContext): Promise<IServices
   const naming: NamingPolicyService = new NamingPolicyService(graph);
   const users: UserService = new UserService(graph);
   const licenses: LicenseService = new LicenseService(graph, data);
-  const roles: RoleService = new RoleService(graph, data);
+  const roles: RoleService = new RoleService(graph, data, operatorUpn);
   const auth: IAuthorizationService = new AppAuthorizationService(roles);
   const preflight: PreflightService = new PreflightService(graph, data);
   const siteAccess: SiteAccessService = new SiteAccessService(context);

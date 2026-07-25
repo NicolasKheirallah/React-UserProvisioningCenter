@@ -128,6 +128,21 @@ export const SettingsPanel: React.FC = () => {
         </Text>
       </div>
 
+      <Field label={strings.SettingsRequiredApprovalsLabel} className={styles.numberField} hint={strings.SettingsRequiredApprovalsHint}>
+        <SpinButton
+          value={draft.requiredApprovals}
+          min={1}
+          max={10}
+          disabled={!draft.requireApproval}
+          onChange={(_, data) =>
+            updateDraft({
+              ...draft,
+              requiredApprovals: clamp(data.value ?? parseInt(data.displayValue ?? '', 10), 1, 10, persisted.requiredApprovals)
+            })
+          }
+        />
+      </Field>
+
       <Field label={strings.SettingsBulkLimitLabel} className={styles.numberField}>
         <SpinButton
           value={draft.bulkRowLimit}

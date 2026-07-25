@@ -1,6 +1,7 @@
 import type { GraphService } from '../graph/GraphService';
 import type { SharePointDataService } from '../sharePointData/SharePointDataService';
-import type { AppPermission, AppRole, IResolvedRoles, IRoleDefinition } from '../../models';
+import { isDelegationActive } from '../../models';
+import type { AppPermission, AppRole, IApprovalDelegation, IResolvedRoles, IRoleDefinition } from '../../models';
 
 const CACHE_TTL_MS: number = 15 * 60 * 1000;
 const CHECK_MEMBER_GROUPS_LIMIT: number = 20;
@@ -29,11 +30,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
 export class RoleService {
   private readonly _graph: GraphService;
   private readonly _data: SharePointDataService;
+  private readonly _operatorUpn: string;
   private _cache: { value: IResolvedRoles; expiresAt: number } | undefined;
 
-  public constructor(graph: GraphService, data: SharePointDataService) {
+  public constructor(graph: GraphService, data: SharePointDataService, operatorUpn: string = '') {
     this._graph = graph;
     this._data = data;
+    this._operatorUpn = operatorUpn;
   }
 
   public async getResolvedRoles(forceRefresh: boolean = false): Promise<IResolvedRoles> {
@@ -101,6 +104,16 @@ export class RoleService {
     if (roles.length === 0) {
       roles.push('ReadOnly');
     }
+
+    try {
+      const delegations: IApprovalDelegation[] = await this._data.getActiveDelegationsFor(this._operatorUpn);
+      if (delegations.some((d) => isDelegationActive(d))) {
+        permissions.add('approveJobs');
+      }
+    } catch {
+      /* a failed delegation lookup only withholds the delegated capability */
+    }
+
     return { roles, permissions, resolvedUtc: new Date().toISOString() };
   }
 }

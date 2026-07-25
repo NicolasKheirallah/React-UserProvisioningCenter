@@ -12,11 +12,12 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import * as strings from 'UpcStrings';
 import { useServices } from '../../contexts/ServicesContext';
-import { useRoleDefinitionsForManagement } from '../../hooks/useReferenceData';
+import { useAppRoles, useRoleDefinitionsForManagement } from '../../hooks/useReferenceData';
 import { QK_APP_ROLES, QK_ROLES } from '../../constants/queryKeys';
 import type { AppPermission, IRoleManagementItem } from '../../models';
 import { DataState } from '../Shared/DataState';
 import { useAppToast } from '../Shared/AppToaster';
+import { ApprovalDelegationsPanel } from './ApprovalDelegationsPanel';
 
 const ALL_PERMISSIONS: readonly AppPermission[] = [
   'createJobs',
@@ -28,7 +29,8 @@ const ALL_PERMISSIONS: readonly AppPermission[] = [
   'manageTemplates',
   'viewAudit',
   'manageTasks',
-  'manageSettings'
+  'manageSettings',
+  'manageDelegations'
 ];
 
 function permissionLabel(permission: AppPermission): string {
@@ -53,6 +55,8 @@ function permissionLabel(permission: AppPermission): string {
       return strings.PermissionManageTasks;
     case 'manageSettings':
       return strings.PermissionManageSettings;
+    case 'manageDelegations':
+      return strings.PermissionManageDelegations;
     default:
       return permission;
   }
@@ -193,35 +197,45 @@ const RoleCard: React.FC<IRoleCardProps> = ({ item, onSaved }) => {
 export const RolesPanel: React.FC = () => {
   const styles = useStyles();
   const query = useRoleDefinitionsForManagement();
+  const roles = useAppRoles();
+  const permissions = roles.data?.permissions;
+  const canManageSettings: boolean = permissions?.has('manageSettings') ?? false;
+  const canManageDelegations: boolean = permissions?.has('manageDelegations') ?? false;
+  const canApprove: boolean = permissions?.has('approveJobs') ?? false;
 
   return (
     <div className={styles.root}>
-      <Subtitle2 as="h3" block>
-        {strings.RolesTitle}
-      </Subtitle2>
-      <Text className={styles.hint}>{strings.RolesIntro}</Text>
-      <DataState
-        isLoading={query.isLoading}
-        error={query.error}
-        isEmpty={(query.data ?? []).length === 0}
-        emptyTitle={strings.RolesEmptyTitle}
-        emptyBody={strings.RolesEmptyBody}
-        onRetry={() => {
-          void query.refetch();
-        }}
-      >
-        <div className={styles.cards}>
-          {(query.data ?? []).map((item) => (
-            <RoleCard
-              key={item.itemId}
-              item={item}
-              onSaved={() => {
-                void query.refetch();
-              }}
-            />
-          ))}
-        </div>
-      </DataState>
+      {canManageSettings ? (
+        <>
+          <Subtitle2 as="h3" block>
+            {strings.RolesTitle}
+          </Subtitle2>
+          <Text className={styles.hint}>{strings.RolesIntro}</Text>
+          <DataState
+            isLoading={query.isLoading}
+            error={query.error}
+            isEmpty={(query.data ?? []).length === 0}
+            emptyTitle={strings.RolesEmptyTitle}
+            emptyBody={strings.RolesEmptyBody}
+            onRetry={() => {
+              void query.refetch();
+            }}
+          >
+            <div className={styles.cards}>
+              {(query.data ?? []).map((item) => (
+                <RoleCard
+                  key={item.itemId}
+                  item={item}
+                  onSaved={() => {
+                    void query.refetch();
+                  }}
+                />
+              ))}
+            </div>
+          </DataState>
+        </>
+      ) : undefined}
+      {canManageDelegations || canApprove ? <ApprovalDelegationsPanel canManageAll={canManageDelegations} /> : undefined}
     </div>
   );
 };
