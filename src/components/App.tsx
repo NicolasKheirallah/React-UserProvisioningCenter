@@ -237,7 +237,12 @@ export const App: React.FC<IAppProps> = ({ services, theme, dir, instanceId }) =
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { retry: shouldRetryQuery, refetchOnWindowFocus: false }
+          queries: {
+            retry: shouldRetryQuery,
+            refetchOnWindowFocus: false,
+            networkMode: 'always'
+          },
+          mutations: { networkMode: 'always' }
         }
       })
   );

@@ -501,6 +501,8 @@ declare interface IUpcStrings {
   RolesBootstrapNotice: string;
   DiagnosticsTitle: string;
   DiagnosticsEmpty: string;
+  QueryPausedTitle: string;
+  QueryPausedBody: string;
 }
 
 declare module 'UpcStrings' {

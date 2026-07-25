@@ -346,6 +346,7 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
       {jobs.isLoading || jobs.error ? <DiagnosticsPanel /> : undefined}
       <DataState
         isLoading={jobs.isLoading}
+        isPaused={jobs.fetchStatus === 'paused'}
         error={jobs.error}
         isEmpty={!jobs.isLoading && items.length === 0 && !hasActiveFilters}
         emptyTitle={strings.JobsEmptyTitle}

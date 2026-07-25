@@ -520,6 +520,8 @@ define([], function () {
     RolesUnconfiguredReadOnly: 'UPC_Roles har ingen roll som pekar på en Entra-grupp, så ingen har behörigheter. Be en webbplatsägare öppna den här sidan och koppla minst ITAdmin-rollen.',
     RolesBootstrapNotice: 'Du ser Roller och Inställningar eftersom du kan hantera den här webbplatsen och UPC inte är konfigurerat än. Koppla en roll till en Entra-grupp för att ge normala behörigheter.',
     DiagnosticsTitle: 'UPC-diagnostik (senaste aktivitet)',
-    DiagnosticsEmpty: 'Ingen SharePoint- eller Graph-aktivitet har registrerats än. Om detta förblir tomt medan listan laddas har frågan aldrig startat.'
+    DiagnosticsEmpty: 'Ingen SharePoint- eller Graph-aktivitet har registrerats än. Om detta förblir tomt medan listan laddas har frågan aldrig startat.',
+    QueryPausedTitle: 'Pausad — webbläsaren rapporterar ingen nätverksanslutning',
+    QueryPausedBody: 'Begäranden är pausade eftersom webbläsaren anger att den är offline. Det är ofta felaktigt bakom VPN eller proxy. Försök igen eller kontrollera anslutningen.'
   };
 });

@@ -39,6 +39,7 @@ export interface IDataStateProps {
   emptyBody?: string;
   emptyAction?: React.ReactNode;
   onRetry?: () => void;
+  isPaused?: boolean;
   slowAfterMs?: number;
   children?: React.ReactNode;
 }
@@ -75,6 +76,22 @@ export const DataState: React.FC<IDataStateProps> = (props) => {
               </Text>
             </>
           ) : undefined}
+        </MessageBarBody>
+        {props.onRetry ? (
+          <MessageBarActions>
+            <Button onClick={props.onRetry}>{strings.RetryLabel}</Button>
+          </MessageBarActions>
+        ) : undefined}
+      </MessageBar>
+    );
+  }
+
+  if (props.isPaused) {
+    return (
+      <MessageBar intent="warning" layout="multiline">
+        <MessageBarBody>
+          <MessageBarTitle>{strings.QueryPausedTitle}</MessageBarTitle>
+          {strings.QueryPausedBody}
         </MessageBarBody>
         {props.onRetry ? (
           <MessageBarActions>

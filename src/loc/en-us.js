@@ -520,6 +520,8 @@ define([], function () {
     RolesUnconfiguredReadOnly: 'UPC_Roles has no role pointing at an Entra group, so nobody has permissions. Ask a site owner to open this page and map at least the ITAdmin role.',
     RolesBootstrapNotice: 'You are seeing Roles and Settings because you can manage this site and UPC is not configured yet. Map a role to an Entra group to grant normal permissions.',
     DiagnosticsTitle: 'UPC diagnostics (recent activity)',
-    DiagnosticsEmpty: 'No SharePoint or Graph activity has been recorded yet. If this stays empty while the list is loading, the query never started.'
+    DiagnosticsEmpty: 'No SharePoint or Graph activity has been recorded yet. If this stays empty while the list is loading, the query never started.',
+    QueryPausedTitle: 'Paused — the browser reports no network connection',
+    QueryPausedBody: 'Requests are paused because the browser says it is offline. This is often wrong behind a VPN or proxy. Try again, or check your connection.'
   };
 });
