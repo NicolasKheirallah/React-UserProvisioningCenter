@@ -24,9 +24,10 @@ function makeGraph(checkMemberGroups: (groupIds: string[]) => string[]): GraphSe
   } as unknown as GraphService;
 }
 
-function makeData(definitions: IRoleDefinition[]): SharePointDataService {
+function makeData(definitions: IRoleDefinition[], canManageWeb: boolean = false): SharePointDataService {
   return {
-    getRoleDefinitions: async () => definitions
+    getRoleDefinitions: async () => definitions,
+    canManageWeb: async () => canManageWeb
   } as unknown as SharePointDataService;
 }
 
@@ -205,5 +206,75 @@ describe('RoleService.isMemberOfGroup', () => {
     const svc = new RoleService(graph, makeData([]));
 
     expect(await svc.isMemberOfGroup('grp-approvers')).toBe(false);
+  });
+});
+
+describe('RoleService bootstrap for an unconfigured install', () => {
+  it('reports unconfigured when no role is mapped to a group', async () => {
+    const graph = makeGraph(() => []);
+    const svc = new RoleService(graph, makeData([]));
+
+    const resolved = await svc.getResolvedRoles();
+    expect(resolved.unconfigured).toBe(true);
+  });
+
+  it('grants configuration-only permissions to someone who can manage the site', async () => {
+    const graph = makeGraph(() => []);
+    const svc = new RoleService(graph, makeData([], true));
+
+    const resolved = await svc.getResolvedRoles();
+    expect(resolved.bootstrapGranted).toBe(true);
+    expect(resolved.permissions.has('manageSettings')).toBe(true);
+    expect(resolved.permissions.has('manageDelegations')).toBe(true);
+    expect(resolved.permissions.has('viewAudit')).toBe(true);
+  });
+
+  it('never grants job execution through the bootstrap path', async () => {
+    const graph = makeGraph(() => []);
+    const svc = new RoleService(graph, makeData([], true));
+
+    const resolved = await svc.getResolvedRoles();
+    expect(resolved.permissions.has('createJobs')).toBe(false);
+    expect(resolved.permissions.has('runJobs')).toBe(false);
+    expect(resolved.permissions.has('approveJobs')).toBe(false);
+    expect(resolved.permissions.has('rollbackJobs')).toBe(false);
+  });
+
+  it('grants nothing to a non-owner on an unconfigured install', async () => {
+    const graph = makeGraph(() => []);
+    const svc = new RoleService(graph, makeData([], false));
+
+    const resolved = await svc.getResolvedRoles();
+    expect(resolved.bootstrapGranted).toBe(false);
+    expect(resolved.permissions.size).toBe(0);
+    expect(resolved.roles).toEqual(['ReadOnly']);
+  });
+
+  it('does not bootstrap once a role is mapped, even for a site owner', async () => {
+    const graph = makeGraph(() => []);
+    const definitions: IRoleDefinition[] = [
+      { role: 'ITAdmin', memberGroupId: 'group-it-admin', permissions: [] }
+    ];
+    const svc = new RoleService(graph, makeData(definitions, true));
+
+    const resolved = await svc.getResolvedRoles();
+    expect(resolved.unconfigured).toBe(false);
+    expect(resolved.bootstrapGranted).toBe(false);
+    expect(resolved.permissions.size).toBe(0);
+  });
+
+  it('survives a failing site-permission probe', async () => {
+    const graph = makeGraph(() => []);
+    const data = {
+      getRoleDefinitions: async () => [],
+      canManageWeb: async () => {
+        throw new Error('permission probe failed');
+      }
+    } as unknown as SharePointDataService;
+    const svc = new RoleService(graph, data);
+
+    const resolved = await svc.getResolvedRoles();
+    expect(resolved.bootstrapGranted).toBe(false);
+    expect(resolved.roles).toEqual(['ReadOnly']);
   });
 });

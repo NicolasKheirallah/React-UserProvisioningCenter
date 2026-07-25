@@ -1172,12 +1172,23 @@ export class SharePointDataService {
     );
   }
 
+  public async canManageWeb(): Promise<boolean> {
+    try {
+      return await sharePointRetry(
+        () => this._sp.web.currentUserHasPermissions(PermissionKind.ManageWeb),
+        { circuitKey: 'sharepoint:permissions', maxAttempts: 2 }
+      );
+    } catch {
+      return false;
+    }
+  }
+
   public async validateSchema(): Promise<ISchemaValidationResult> {
     const results: (ISchemaGap | undefined)[] = await Promise.all(
       UPC_LIST_DEFINITIONS.map(async (definition) => {
         try {
           const fields: { InternalName: string }[] = await sharePointRetry(
-            () => this._sp.web.lists.getByTitle(definition.title).fields.select('InternalName')(),
+            () => this._sp.web.lists.getByTitle(definition.title).fields.select('InternalName').top(500)(),
             { circuitKey: definition.title, maxAttempts: 2 }
           );
           const present: Set<string> = new Set(fields.map((f) => f.InternalName));

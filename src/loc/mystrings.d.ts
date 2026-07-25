@@ -495,6 +495,10 @@ declare interface IUpcStrings {
   RollbackSucceeded: string;
   RollbackPartial: string;
   RollbackFailed: string;
+  RolesUnconfiguredTitle: string;
+  RolesUnconfiguredBody: string;
+  RolesUnconfiguredReadOnly: string;
+  RolesBootstrapNotice: string;
 }
 
 declare module 'UpcStrings' {

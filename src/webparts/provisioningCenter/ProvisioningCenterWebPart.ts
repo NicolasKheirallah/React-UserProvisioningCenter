@@ -154,7 +154,13 @@ export default class ProvisioningCenterWebPart extends BaseClientSideWebPart<IPr
         `${strings.ProvisionExistingLabel}: ${result.existingLists.length}, ` +
         `${strings.ProvisionFieldsLabel}: ${result.createdFields}, ` +
         `${strings.ProvisionItemsLabel}: ${result.createdItems}, ` +
-        `${strings.ProvisionIndexesLabel}: ${result.createdIndexes}`;
+        `${strings.ProvisionIndexesLabel}: ${result.createdIndexes}` +
+        (result.warnings.length > 0
+          ? ` | ${strings.ProvisionWarningsLabel}: ${result.warnings.length} — ${result.warnings.join('; ')}`
+          : '');
+      if (result.warnings.length > 0) {
+        console.warn('[UPC] provisioning warnings', result.warnings);
+      }
       this.render();
     } catch (err) {
       const message: string = err instanceof Error ? err.message : '';

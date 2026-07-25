@@ -12,6 +12,7 @@ declare interface IProvisioningCenterWebPartStrings {
   ProvisionFieldsLabel: string;
   ProvisionItemsLabel: string;
   ProvisionIndexesLabel: string;
+  ProvisionWarningsLabel: string;
 }
 
 declare module 'ProvisioningCenterWebPartStrings' {

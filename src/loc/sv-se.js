@@ -514,6 +514,10 @@ define([], function () {
     RollbackConfirm: 'Återställ',
     RollbackSucceeded: 'Återställningen är klar.',
     RollbackPartial: 'Återställningen slutfördes, men vissa steg kunde inte återställas.',
-    RollbackFailed: 'Återställningen misslyckades.'
+    RollbackFailed: 'Återställningen misslyckades.',
+    RolesUnconfiguredTitle: 'Inga roller är kopplade än',
+    RolesUnconfiguredBody: 'UPC_Roles har ingen roll som pekar på en Entra-grupp, så ingen har behörigheter och de flesta flikar är dolda. Öppna Roller och ange ett Member Group Id för minst ITAdmin.',
+    RolesUnconfiguredReadOnly: 'UPC_Roles har ingen roll som pekar på en Entra-grupp, så ingen har behörigheter. Be en webbplatsägare öppna den här sidan och koppla minst ITAdmin-rollen.',
+    RolesBootstrapNotice: 'Du ser Roller och Inställningar eftersom du kan hantera den här webbplatsen och UPC inte är konfigurerat än. Koppla en roll till en Entra-grupp för att ge normala behörigheter.'
   };
 });

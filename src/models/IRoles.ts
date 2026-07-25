@@ -34,4 +34,8 @@ export interface IResolvedRoles {
   roles: AppRole[];
   permissions: Set<AppPermission>;
   resolvedUtc: string;
+  unconfigured: boolean;
+  bootstrapGranted: boolean;
 }
+
+export const BOOTSTRAP_PERMISSIONS: AppPermission[] = ['manageSettings', 'manageDelegations', 'viewAudit'];

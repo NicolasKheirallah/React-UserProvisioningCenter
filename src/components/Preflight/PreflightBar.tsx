@@ -7,7 +7,7 @@ import {
   tokens
 } from '@fluentui/react-components';
 import * as strings from 'UpcStrings';
-import { usePreflight } from '../../hooks/useReferenceData';
+import { useAppRoles, usePreflight } from '../../hooks/useReferenceData';
 
 const useStyles = makeStyles({
   list: {
@@ -19,22 +19,36 @@ const useStyles = makeStyles({
 export const PreflightBar: React.FC = () => {
   const styles = useStyles();
   const preflight = usePreflight();
+  const roles = useAppRoles();
+
+  const rolesBar =
+    roles.data?.unconfigured === true ? (
+      <MessageBar intent="warning" layout="multiline">
+        <MessageBarBody>
+          <MessageBarTitle>{strings.RolesUnconfiguredTitle}</MessageBarTitle>
+          {roles.data.bootstrapGranted ? strings.RolesUnconfiguredBody : strings.RolesUnconfiguredReadOnly}
+        </MessageBarBody>
+      </MessageBar>
+    ) : undefined;
 
   if (preflight.isLoading) {
-    return null;
+    return rolesBar ?? null;
   }
   if (preflight.error) {
     return (
-      <MessageBar intent="error" layout="multiline">
+      <>
+        {rolesBar}
+        <MessageBar intent="error" layout="multiline">
         <MessageBarBody>
           <MessageBarTitle>{strings.PreflightErrorTitle}</MessageBarTitle>
           {preflight.error instanceof Error ? preflight.error.message : ''}
-        </MessageBarBody>
-      </MessageBar>
+          </MessageBarBody>
+        </MessageBar>
+      </>
     );
   }
   if (!preflight.data || preflight.data.missing.length === 0) {
-    return null;
+    return rolesBar ?? null;
   }
 
   const schemaGaps = preflight.data.schemaGaps ?? [];
@@ -42,6 +56,7 @@ export const PreflightBar: React.FC = () => {
 
   return (
     <>
+      {rolesBar}
       {schemaGaps.length > 0 ? (
         <MessageBar intent="error" layout="multiline">
           <MessageBarBody>

@@ -1,6 +1,7 @@
 import type { GraphService } from '../graph/GraphService';
 import type { SharePointDataService } from '../sharePointData/SharePointDataService';
 import { isDelegationActive } from '../../models';
+import { BOOTSTRAP_PERMISSIONS } from '../../models';
 import type { AppPermission, AppRole, IApprovalDelegation, IResolvedRoles, IRoleDefinition } from '../../models';
 
 const CACHE_TTL_MS: number = 15 * 60 * 1000;
@@ -102,6 +103,21 @@ export class RoleService {
         permissions.add(permission);
       }
     }
+    const unconfigured: boolean = definitions.length === 0;
+    let bootstrapGranted: boolean = false;
+    if (unconfigured && roles.length === 0) {
+      try {
+        bootstrapGranted = await this._data.canManageWeb();
+      } catch {
+        bootstrapGranted = false;
+      }
+      if (bootstrapGranted) {
+        for (const permission of BOOTSTRAP_PERMISSIONS) {
+          permissions.add(permission);
+        }
+      }
+    }
+
     if (roles.length === 0) {
       roles.push('ReadOnly');
     }
@@ -115,6 +131,12 @@ export class RoleService {
       void delegationErr;
     }
 
-    return { roles, permissions, resolvedUtc: new Date().toISOString() };
+    return {
+      roles,
+      permissions,
+      resolvedUtc: new Date().toISOString(),
+      unconfigured,
+      bootstrapGranted
+    };
   }
 }

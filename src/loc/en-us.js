@@ -514,6 +514,10 @@ define([], function () {
     RollbackConfirm: 'Roll back',
     RollbackSucceeded: 'Rollback complete.',
     RollbackPartial: 'Rollback finished, but some steps could not be reversed.',
-    RollbackFailed: 'Rollback failed.'
+    RollbackFailed: 'Rollback failed.',
+    RolesUnconfiguredTitle: 'No roles are mapped yet',
+    RolesUnconfiguredBody: 'UPC_Roles has no role pointing at an Entra group, so nobody has permissions and most tabs stay hidden. Open Roles and set a Member Group Id for at least ITAdmin.',
+    RolesUnconfiguredReadOnly: 'UPC_Roles has no role pointing at an Entra group, so nobody has permissions. Ask a site owner to open this page and map at least the ITAdmin role.',
+    RolesBootstrapNotice: 'You are seeing Roles and Settings because you can manage this site and UPC is not configured yet. Map a role to an Entra group to grant normal permissions.'
   };
 });

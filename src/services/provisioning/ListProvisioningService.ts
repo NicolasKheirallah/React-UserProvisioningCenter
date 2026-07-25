@@ -21,6 +21,7 @@ export interface IProvisioningResult {
   createdFields: number;
   createdItems: number;
   createdIndexes: number;
+  warnings: string[];
 }
 
 const GENERIC_LIST_TEMPLATE: number = 100;
@@ -74,17 +75,26 @@ export class ListProvisioningService {
       existingLists: [],
       createdFields: 0,
       createdItems: 0,
-      createdIndexes: 0
+      createdIndexes: 0,
+      warnings: []
     };
     for (const definition of UPC_LIST_DEFINITIONS) {
       onProgress?.({ message: definition.title });
-      const created: number = await this._ensureList(definition, result);
-      result.createdFields += created;
-      result.createdIndexes += await this._ensureIndexes(definition);
+      try {
+        const created: number = await this._ensureList(definition, result);
+        result.createdFields += created;
+        result.createdIndexes += await this._ensureIndexes(definition, result);
+      } catch (err) {
+        result.warnings.push(`${definition.title}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
     for (const seed of UPC_SEED_DEFINITIONS) {
       onProgress?.({ message: seed.listTitle });
-      result.createdItems += await this._ensureSeedItems(seed);
+      try {
+        result.createdItems += await this._ensureSeedItems(seed);
+      } catch (err) {
+        result.warnings.push(`${seed.listTitle}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
     return result;
   }
@@ -99,7 +109,7 @@ export class ListProvisioningService {
     const list: IList = ensure.list;
 
     const existingFields: { InternalName: string; Title: string; CanBeDeleted: boolean }[] =
-      await list.fields.select('InternalName', 'Title', 'CanBeDeleted')();
+      await list.fields.select('InternalName', 'Title', 'CanBeDeleted').top(500)();
     const existingNames: Set<string> = new Set(existingFields.map((f) => f.InternalName));
 
     let createdFields: number = 0;
@@ -134,7 +144,7 @@ export class ListProvisioningService {
     return createdFields;
   }
 
-  private async _ensureIndexes(definition: IUpcListDefinition): Promise<number> {
+  private async _ensureIndexes(definition: IUpcListDefinition, result: IProvisioningResult): Promise<number> {
     const wanted: string[] = [
       ...definition.fields.filter((f) => f.indexed).map((f) => f.name),
       ...(definition.indexedBuiltInFields ?? [])
@@ -143,19 +153,25 @@ export class ListProvisioningService {
       return 0;
     }
     const list = this._sp.web.lists.getByTitle(definition.title);
-    const existing: { InternalName: string; Indexed: boolean }[] = await list.fields.select('InternalName', 'Indexed')();
+    const existing: { InternalName: string; Indexed: boolean }[] = await list.fields.select('InternalName', 'Indexed').top(500)();
     const indexedNow: Map<string, boolean> = new Map(existing.map((f) => [f.InternalName, f.Indexed]));
 
     let created: number = 0;
     for (const name of wanted) {
-      if (indexedNow.get(name) !== false) {
+      if (!indexedNow.has(name)) {
+        result.warnings.push(`${definition.title}: cannot index ${name}, column not found`);
+        continue;
+      }
+      if (indexedNow.get(name) === true) {
         continue;
       }
       try {
         await list.fields.getByInternalNameOrTitle(name).update({ Indexed: true });
         created++;
       } catch (indexErr) {
-        void indexErr;
+        result.warnings.push(
+          `${definition.title}: could not index ${name} (${indexErr instanceof Error ? indexErr.message : String(indexErr)})`
+        );
       }
     }
     return created;
