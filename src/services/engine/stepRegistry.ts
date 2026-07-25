@@ -4,16 +4,24 @@ import { CLONE_STEPS, ONBOARDING_STEPS } from './steps/onboardingSteps';
 import { OFFBOARDING_STEPS } from './steps/offboardingSteps';
 import { TRANSFER_STEPS } from './steps/transferSteps';
 
-/** Step pipeline per job type. Bulk rows are submitted as individual Onboard jobs. */
+const DEFAULT_PIPELINES: Record<JobType, IWorkflowStepDefinition[]> = {
+  Onboard: ONBOARDING_STEPS,
+  Offboard: OFFBOARDING_STEPS,
+  Transfer: TRANSFER_STEPS,
+  Clone: CLONE_STEPS,
+  Bulk: ONBOARDING_STEPS
+};
+
+const pipelines: Record<JobType, IWorkflowStepDefinition[]> = { ...DEFAULT_PIPELINES };
+
+export function registerStepPipeline(jobType: JobType, steps: IWorkflowStepDefinition[]): void {
+  pipelines[jobType] = steps;
+}
+
+export function resetStepPipeline(jobType: JobType): void {
+  pipelines[jobType] = DEFAULT_PIPELINES[jobType];
+}
+
 export function stepsForJobType(jobType: JobType): IWorkflowStepDefinition[] {
-  switch (jobType) {
-    case 'Offboard':
-      return OFFBOARDING_STEPS;
-    case 'Transfer':
-      return TRANSFER_STEPS;
-    case 'Clone':
-      return CLONE_STEPS;
-    default:
-      return ONBOARDING_STEPS;
-  }
+  return pipelines[jobType] ?? DEFAULT_PIPELINES.Onboard;
 }

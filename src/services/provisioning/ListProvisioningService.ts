@@ -19,8 +19,8 @@ export interface IProvisioningResult {
   createdLists: string[];
   existingLists: string[];
   createdFields: number;
-  /** Number of seed list items inserted (settings row, role rows, …). */
   createdItems: number;
+  createdIndexes: number;
 }
 
 const GENERIC_LIST_TEMPLATE: number = 100;
@@ -38,7 +38,8 @@ function fieldSchemaXml(field: IUpcFieldDefinition): string {
   const common: string =
     `Name="${field.name}" StaticName="${field.name}" ` +
     `DisplayName="${escapeXml(field.displayName)}"` +
-    (field.required ? ' Required="TRUE"' : '');
+    (field.required ? ' Required="TRUE"' : '') +
+    (field.indexed ? ' Indexed="TRUE"' : '');
   switch (field.type) {
     case 'Note':
       return `<Field Type="Note" ${common} NumLines="6" />`;
@@ -47,9 +48,7 @@ function fieldSchemaXml(field: IUpcFieldDefinition): string {
     case 'User':
       return `<Field Type="User" ${common} UserSelectionMode="PeopleOnly" />`;
     case 'Choice': {
-      const choices: string = (field.choices ?? [])
-        .map((c) => `<CHOICE>${escapeXml(c)}</CHOICE>`)
-        .join('');
+      const choices: string = (field.choices ?? []).map((c) => `<CHOICE>${escapeXml(c)}</CHOICE>`).join('');
       return `<Field Type="Choice" ${common} Format="Dropdown"><CHOICES>${choices}</CHOICES></Field>`;
     }
     default:
@@ -57,43 +56,32 @@ function fieldSchemaXml(field: IUpcFieldDefinition): string {
   }
 }
 
-/**
- * Client-side alternative to provisioning-assets/lists.ps1: creates the
- * UPC_* lists from the web part's property pane. Idempotent — existing
- * lists/fields are left untouched. Requires the signed-in user to hold
- * Manage Lists rights on the host site (site owner); this is SharePoint
- * permission territory, independent of the Graph/Entra model.
- */
 export class ListProvisioningService {
   private readonly _sp: SPFI;
 
   public constructor(context: WebPartContext);
   public constructor(sp: SPFI);
   public constructor(contextOrSp: WebPartContext | SPFI) {
-    // Share the SPFI root with SharePointDataService when callers pass the
-    // same instance; otherwise create a standalone one (property-pane path).
     this._sp =
       contextOrSp && typeof contextOrSp === 'object' && 'web' in contextOrSp
         ? (contextOrSp as SPFI)
         : spfi().using(SPFx(contextOrSp as WebPartContext));
   }
 
-  public async ensureAllLists(
-    onProgress?: (progress: IProvisioningProgress) => void
-  ): Promise<IProvisioningResult> {
+  public async ensureAllLists(onProgress?: (progress: IProvisioningProgress) => void): Promise<IProvisioningResult> {
     const result: IProvisioningResult = {
       createdLists: [],
       existingLists: [],
       createdFields: 0,
-      createdItems: 0
+      createdItems: 0,
+      createdIndexes: 0
     };
     for (const definition of UPC_LIST_DEFINITIONS) {
       onProgress?.({ message: definition.title });
       const created: number = await this._ensureList(definition, result);
       result.createdFields += created;
+      result.createdIndexes += await this._ensureIndexes(definition);
     }
-    // Seed default list items (UPC_Settings row, UPC_Roles rows) after all
-    // lists and fields exist. Idempotent — only inserts what is still missing.
     for (const seed of UPC_SEED_DEFINITIONS) {
       onProgress?.({ message: seed.listTitle });
       result.createdItems += await this._ensureSeedItems(seed);
@@ -101,15 +89,8 @@ export class ListProvisioningService {
     return result;
   }
 
-  private async _ensureList(
-    definition: IUpcListDefinition,
-    result: IProvisioningResult
-  ): Promise<number> {
-    const ensure = await this._sp.web.lists.ensure(
-      definition.title,
-      'User Provisioning Center',
-      GENERIC_LIST_TEMPLATE
-    );
+  private async _ensureList(definition: IUpcListDefinition, result: IProvisioningResult): Promise<number> {
+    const ensure = await this._sp.web.lists.ensure(definition.title, 'User Provisioning Center', GENERIC_LIST_TEMPLATE);
     if (ensure.created) {
       result.createdLists.push(definition.title);
     } else {
@@ -126,10 +107,6 @@ export class ListProvisioningService {
       if (existingNames.has(field.name)) {
         continue;
       }
-      // Repair pass: an earlier version created fields without the
-      // internal-name hint, so SharePoint derived internal names from the
-      // display name (e.g. Job_x0020_Type). Remove such a stray before
-      // creating the correctly named field.
       const mangled = existingFields.filter(
         (f) =>
           f.Title === field.displayName &&
@@ -142,40 +119,48 @@ export class ListProvisioningService {
       }
       await list.fields.createFieldAsXml({
         SchemaXml: fieldSchemaXml(field),
-        // Without AddFieldInternalNameHint SharePoint ignores the Name
-        // attribute and mangles the internal name from DisplayName.
-        Options:
-          AddFieldOptions.AddFieldInternalNameHint | AddFieldOptions.AddFieldToDefaultView
+        Options: AddFieldOptions.AddFieldInternalNameHint | AddFieldOptions.AddFieldToDefaultView
       });
       createdFields++;
     }
 
     if (definition.auditSecurity) {
-      // Members may only edit their own items; versioning keeps history.
-      // Closest list-level approximation of create-only (see lists.ps1 note).
-      // Checked and repaired on every run — not just at first creation — so
-      // re-running "Provision Lists" actually restores these settings if an
-      // admin or governance tool has since reset them on an existing list.
       const current: { ReadSecurity: number; WriteSecurity: number; EnableVersioning: boolean } =
         await list.select('ReadSecurity', 'WriteSecurity', 'EnableVersioning')();
-      if (
-        current.ReadSecurity !== 1 ||
-        current.WriteSecurity !== 2 ||
-        !current.EnableVersioning
-      ) {
+      if (current.ReadSecurity !== 1 || current.WriteSecurity !== 2 || !current.EnableVersioning) {
         await list.update({ ReadSecurity: 1, WriteSecurity: 2, EnableVersioning: true });
       }
     }
     return createdFields;
   }
 
-  /**
-   * Inserts seed items when missing. Detects existing items by the
-   * `identityField` (Title) so re-running never duplicates them. If a row
-   * already exists but its payload is empty (e.g. MemberGroupId blank on a
-   * pre-existing UPC_Roles row), the row is left untouched — the admin may
-   * have intentionally cleared it.
-   */
+  private async _ensureIndexes(definition: IUpcListDefinition): Promise<number> {
+    const wanted: string[] = [
+      ...definition.fields.filter((f) => f.indexed).map((f) => f.name),
+      ...(definition.indexedBuiltInFields ?? [])
+    ];
+    if (wanted.length === 0) {
+      return 0;
+    }
+    const list = this._sp.web.lists.getByTitle(definition.title);
+    const existing: { InternalName: string; Indexed: boolean }[] = await list.fields.select('InternalName', 'Indexed')();
+    const indexedNow: Map<string, boolean> = new Map(existing.map((f) => [f.InternalName, f.Indexed]));
+
+    let created: number = 0;
+    for (const name of wanted) {
+      if (indexedNow.get(name) !== false) {
+        continue;
+      }
+      try {
+        await list.fields.getByInternalNameOrTitle(name).update({ Indexed: true });
+        created++;
+      } catch {
+        /* list already over the 5,000-item threshold can refuse a new index; skip and continue */
+      }
+    }
+    return created;
+  }
+
   private async _ensureSeedItems(seed: ISeedDefinition): Promise<number> {
     const list = this._sp.web.lists.getByTitle(seed.listTitle);
     let created: number = 0;

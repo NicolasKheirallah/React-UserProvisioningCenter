@@ -7,11 +7,12 @@ import type { NamingPolicyService } from '../namingPolicy/NamingPolicyService';
 import type { UserService } from '../users/UserService';
 import type { SiteAccessService } from '../sites/SiteAccessService';
 import type { IAuthorizationService } from './IAuthorizationService';
-import type { IAuditEntry, IJobStep, IOnboardingPayload, IProvisioningJob, JobStatus } from '../../models';
+import type { AppPermission, IAuditEntry, IJobStep, IJobPayload, IProvisioningJob, JobStatus, JobType } from '../../models';
+import type { ICredentialPresentation } from './stepTypes';
 
-type Handler = (path: string, body?: unknown) => unknown;
+export type Handler = (path: string, body?: unknown) => unknown;
 
-class MockGraph {
+export class MockGraph {
   public handlers: Record<string, Handler> = {};
   public calls: { method: string; path: string; body?: unknown }[] = [];
 
@@ -52,14 +53,15 @@ class MockGraph {
   }
 }
 
-class MockData {
+export class MockData {
   public status: JobStatus;
   public stepsJson: string;
   public targetUserId: string | null = null;
   public auditEntries: IAuditEntry[] = [];
-  private readonly _payload: IOnboardingPayload;
+  public lockOwner: string | undefined;
+  private readonly _payload: IJobPayload;
 
-  public constructor(status: JobStatus, payload: IOnboardingPayload, steps: IJobStep[]) {
+  public constructor(status: JobStatus, payload: IJobPayload, steps: IJobStep[]) {
     this.status = status;
     this._payload = payload;
     this.stepsJson = JSON.stringify(steps);
@@ -77,23 +79,23 @@ class MockData {
     requestedBy: 'HR Person',
     approvedBy: null,
     correlationId: 'corr-1',
-    targetUpn: '',
+    targetUpn: 'anna.svensson@contoso.com',
     targetUserId: this.targetUserId,
     createdUtc: '2026-01-01T00:00:00Z',
     modifiedUtc: '2026-01-01T00:00:00Z'
   });
 
-  public updateJobStatus = async (_itemId: number, status: JobStatus): Promise<string> => {
+  public updateJobStatus = async (_itemId: number, status: JobStatus, _etag?: string): Promise<string> => {
     this.status = status;
     return '*';
   };
 
-  public updateJobSteps = async (_itemId: number, steps: IJobStep[]): Promise<string> => {
+  public updateJobSteps = async (_itemId: number, steps: IJobStep[], _etag?: string): Promise<string> => {
     this.stepsJson = JSON.stringify(steps);
     return '*';
   };
 
-  public setJobTargetUser = async (_itemId: number, userId: string): Promise<string> => {
+  public setJobTargetUser = async (_itemId: number, userId: string, _etag?: string): Promise<string> => {
     this.targetUserId = userId;
     return '*';
   };
@@ -102,45 +104,66 @@ class MockData {
     this.auditEntries.push(entry);
   };
 
-  public acquireJobLock = async (): Promise<string> => '*';
-  public releaseJobLock = async (): Promise<void> => undefined;
+  public acquireJobLock = async (_itemId: number, instanceId: string): Promise<string> => {
+    this.lockOwner = instanceId;
+    return '*';
+  };
+
+  public releaseJobLock = async (_itemId: number, instanceId: string): Promise<void> => {
+    if (this.lockOwner === instanceId) {
+      this.lockOwner = undefined;
+    }
+  };
+
+  public recordApproval = async (): Promise<{ satisfied: boolean; granted: number; required: number }> => {
+    this.status = 'Approved';
+    return { satisfied: true, granted: 1, required: 1 };
+  };
 
   public steps(): IJobStep[] {
     return JSON.parse(this.stepsJson);
   }
 }
 
-function guestPayload(): IOnboardingPayload {
+export class AllowAllAuth implements IAuthorizationService {
+  public denied: Set<AppPermission> = new Set();
+  public async require(permission: AppPermission): Promise<void> {
+    if (this.denied.has(permission)) {
+      throw new Error(`Operation requires permission: ${permission}`);
+    }
+  }
+}
+
+export function onboardingPayload(): IJobPayload {
   return {
     schemaVersion: 1,
     kind: 'onboard',
     personal: {
-      firstName: 'Guest',
-      lastName: 'Partner',
-      displayName: 'Guest Partner',
-      employeeId: 'EXT-001'
+      firstName: 'Anna',
+      lastName: 'Svensson',
+      displayName: 'Anna Svensson',
+      employeeId: 'E12345'
     },
     employment: {
-      jobTitle: 'External Consultant',
+      jobTitle: 'Controller',
       department: 'Finance',
-      employeeType: 'Contractor',
-      hireDate: '2026-08-01'
+      employeeType: 'Employee',
+      hireDate: '2026-08-01',
+      managerId: '11111111-2222-3333-4444-555555555555'
     },
     identity: {
-      // For a guest, "userPrincipalName" carries the invited external email
-      // address — Entra assigns the real #EXT# UPN on redemption.
-      userPrincipalName: 'guest.partner@fabrikam.com',
-      mailNickname: '',
-      domain: '',
-      accountType: 'guest'
+      userPrincipalName: 'anna.svensson@contoso.com',
+      mailNickname: 'anna.svensson',
+      domain: 'contoso.com',
+      accountType: 'member'
     },
     accountSettings: {
       usageLocation: 'SE',
       accountEnabled: true,
       credentialMode: 'password',
-      forceChangePassword: false
+      forceChangePassword: true
     },
-    licenses: [],
+    licenses: [{ skuId: 'sku-1', skuPartNumber: 'SPE_E5' }],
     access: {
       securityGroups: [],
       m365Groups: [],
@@ -149,23 +172,32 @@ function guestPayload(): IOnboardingPayload {
       applications: []
     },
     expirationReviewDays: null
-  };
+  } as IJobPayload;
 }
 
-interface IHarness {
+export async function waitUntil(predicate: () => boolean, maxTicks: number = 50): Promise<void> {
+  for (let i = 0; i < maxTicks && !predicate(); i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+export interface IHarness {
   engine: WorkflowEngine;
   graph: MockGraph;
   data: MockData;
+  auth: AllowAllAuth;
+  credentials: ICredentialPresentation[];
 }
 
-function makeHarness(status: JobStatus): IHarness {
-  const graph = new MockGraph();
-  const data = new MockData(status, guestPayload(), []);
-  const audit = new AuditService(data as unknown as SharePointDataService, 'operator@contoso.com');
-  const naming = { checkUpnAvailability: async () => 'available' } as unknown as NamingPolicyService;
-  const users = { isEmployeeIdTaken: async () => false } as unknown as UserService;
-  const siteAccess = { grantAccess: async () => undefined } as unknown as SiteAccessService;
-  const engine = new WorkflowEngine(
+export function makeHarness(status: JobStatus, steps?: IJobStep[], payload?: IJobPayload, jobType: JobType = 'Onboard'): IHarness {
+  const graph: MockGraph = new MockGraph();
+  const data: MockData = new MockData(status, payload ?? onboardingPayload(), steps ?? []);
+  const audit: AuditService = new AuditService(data as unknown as SharePointDataService, 'operator@contoso.com');
+  const naming: NamingPolicyService = { checkUpnAvailability: async () => 'available' } as unknown as NamingPolicyService;
+  const users: UserService = { isEmployeeIdTaken: async () => false } as unknown as UserService;
+  const siteAccess: SiteAccessService = { grantAccess: async () => undefined } as unknown as SiteAccessService;
+  const auth: AllowAllAuth = new AllowAllAuth();
+  const engine: WorkflowEngine = new WorkflowEngine(
     {
       graph: graph as unknown as GraphService,
       data: data as unknown as SharePointDataService,
@@ -173,65 +205,12 @@ function makeHarness(status: JobStatus): IHarness {
       naming,
       users,
       siteAccess,
-      auth: { require: async () => undefined } as unknown as IAuthorizationService,
-      operatorUpn: 'operator@contoso.com'
+      auth,
+      operatorUpn: 'operator@contoso.com',
+      operatorDisplayName: 'Operator'
     },
     { stepBackoffBaseMs: 1 }
   );
-  return { engine, graph, data };
+  void jobType;
+  return { engine, graph, data, auth, credentials: [] };
 }
-
-function happyPathHandlers(graph: MockGraph): void {
-  graph.handlers = {
-    'GET /users?$select=id&$filter=': () => ({ value: [] }),
-    'POST /invitations': () => ({ invitedUser: { id: 'guest-123' } })
-  };
-}
-
-describe('onboarding: guest invite', () => {
-  it('invites via /invitations instead of creating a cloud account, and skips license/credential steps', async () => {
-    const h: IHarness = makeHarness('Approved');
-    happyPathHandlers(h.graph);
-    let presentedCredentials: boolean = false;
-
-    const job: IProvisioningJob = await h.engine.runJob(1, {
-      presentCredentials: async () => {
-        presentedCredentials = true;
-      }
-    });
-
-    expect(job.status).toBe('Completed');
-    expect(h.data.targetUserId).toBe('guest-123');
-    expect(h.graph.calls.some((c) => c.method === 'POST' && c.path === '/invitations')).toBe(true);
-    // No cloud account creation, no license assignment, no credential hand-over.
-    expect(h.graph.calls.some((c) => c.method === 'POST' && c.path === '/users')).toBe(false);
-    expect(h.graph.calls.some((c) => c.method === 'POST' && c.path === '/users/guest-123/assignLicense')).toBe(
-      false
-    );
-    expect(presentedCredentials).toBe(false);
-    for (const step of h.data.steps()) {
-      expect(step.status).toMatch(/completed|skipped/);
-    }
-  });
-
-  it('is idempotent when the invitation already created the directory object (response lost)', async () => {
-    const h: IHarness = makeHarness('Approved');
-    let invitationCalls: number = 0;
-    h.graph.handlers = {
-      'GET /users?$select=id&$filter=': () => ({ value: [{ id: 'guest-123' }] }),
-      'POST /invitations': () => {
-        invitationCalls++;
-        return { invitedUser: { id: 'guest-999' } };
-      }
-    };
-
-    const job: IProvisioningJob = await h.engine.runJob(1, {
-      presentCredentials: async () => undefined
-    });
-
-    expect(job.status).toBe('Completed');
-    // Found by mail lookup — never re-invited.
-    expect(h.data.targetUserId).toBe('guest-123');
-    expect(invitationCalls).toBe(0);
-  });
-});

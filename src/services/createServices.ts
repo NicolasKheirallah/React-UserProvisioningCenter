@@ -9,6 +9,8 @@ import { LicenseService } from './licenses/LicenseService';
 import { RoleService } from './roles/RoleService';
 import { PreflightService } from './preflight/PreflightService';
 import { WorkflowEngine } from './engine/WorkflowEngine';
+import { AppAuthorizationService } from './engine/AppAuthorizationService';
+import type { IAuthorizationService } from './engine/IAuthorizationService';
 import { TelemetryService } from './telemetry/TelemetryService';
 import { SiteAccessService } from './sites/SiteAccessService';
 
@@ -24,15 +26,11 @@ export interface IServices {
   engine: WorkflowEngine;
   telemetry: TelemetryService;
   siteAccess: SiteAccessService;
+  auth: IAuthorizationService;
   operatorUpn: string;
-  /**
-   * SharePoint's cached profile-photo endpoint for an account — cheap enough
-   * for type-ahead results, unlike per-user Graph photo requests.
-   */
   photoUrl: (upn: string) => string;
 }
 
-/** Composition root, called once from the web part's onInit. */
 export async function createServices(context: WebPartContext): Promise<IServices> {
   const client = await context.msGraphClientFactory.getClient('3');
   const graph: GraphService = new GraphService(client);
@@ -45,7 +43,8 @@ export async function createServices(context: WebPartContext): Promise<IServices
   const users: UserService = new UserService(graph);
   const licenses: LicenseService = new LicenseService(graph, data);
   const roles: RoleService = new RoleService(graph, data);
-  const preflight: PreflightService = new PreflightService(graph);
+  const auth: IAuthorizationService = new AppAuthorizationService(roles);
+  const preflight: PreflightService = new PreflightService(graph, data);
   const siteAccess: SiteAccessService = new SiteAccessService(context);
   const engine: WorkflowEngine = new WorkflowEngine({
     graph,
@@ -54,6 +53,9 @@ export async function createServices(context: WebPartContext): Promise<IServices
     naming,
     users,
     siteAccess,
+    auth,
+    operatorUpn,
+    operatorDisplayName: context.pageContext.user.displayName,
     telemetry
   });
   graph.setTelemetry(telemetry);
@@ -75,6 +77,7 @@ export async function createServices(context: WebPartContext): Promise<IServices
     engine,
     telemetry,
     siteAccess,
+    auth,
     operatorUpn,
     photoUrl
   };

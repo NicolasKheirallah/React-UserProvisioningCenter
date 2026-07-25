@@ -1,10 +1,12 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { useServices } from '../contexts/ServicesContext';
-import { useSettings } from '../contexts/SettingsContext';
 import {
   QK_APP_ROLES,
   QK_APPLICATION_CATALOG,
-  QK_JOBS,
+  QK_DELEGATIONS,
+  QK_JOB_CHANGE_TOKEN,
+  QK_JOB_DETAIL,
+  QK_JOB_SUMMARIES,
   QK_PREFLIGHT,
   QK_ROLES,
   QK_SITE_CATALOG,
@@ -17,6 +19,9 @@ import {
 } from '../constants/queryKeys';
 import type {
   IApplicationCatalogItem,
+  IApprovalDelegation,
+  IJobQuery,
+  IJobSummary,
   ILicenseOption,
   IPreflightResult,
   IProvisioningJob,
@@ -27,12 +32,12 @@ import type {
   ITeamsCatalogItem,
   ITemplateListItem
 } from '../models';
-import type { IPagedResult } from '../services/sharePointData/SharePointDataService';
+import type { IPagedResult } from '../services/util/pagedQuery';
 import type { IVerifiedDomain } from '../services/users/UserService';
 
 const STATIC_STALE_MS: number = 15 * 60 * 1000;
-/** Shorter staleness window for admin-facing but operationally-live lists. */
 const OPERATIONAL_STALE_MS: number = 60 * 1000;
+const CHANGE_TOKEN_POLL_MS: number = 5 * 1000;
 
 export function usePreflight(): UseQueryResult<IPreflightResult> {
   const services = useServices();
@@ -44,10 +49,6 @@ export function usePreflight(): UseQueryResult<IPreflightResult> {
 
 export function useAppRoles(): UseQueryResult<IResolvedRoles> {
   const services = useServices();
-  // forceRefresh left false so RoleService's own 15-minute cache (shared
-  // across any non-React-Query callers) and this query's staleTime don't
-  // fight each other — RoleService.getResolvedRoles is idempotent within
-  // its TTL either way.
   return useQuery(QK_APP_ROLES, () => services.roles.getResolvedRoles(), {
     staleTime: STATIC_STALE_MS
   });
@@ -67,7 +68,6 @@ export function useVerifiedDomains(): UseQueryResult<IVerifiedDomain[]> {
   });
 }
 
-/** Active templates for the wizard's "start from template" picker. */
 export function useActiveTemplates(): UseQueryResult<ITemplateListItem[]> {
   const services = useServices();
   return useQuery(QK_TEMPLATES, () => services.data.getActiveTemplates(), {
@@ -75,7 +75,6 @@ export function useActiveTemplates(): UseQueryResult<ITemplateListItem[]> {
   });
 }
 
-/** All templates (including inactive) for the management tab. */
 export function useAllTemplates(): UseQueryResult<ITemplateListItem[]> {
   const services = useServices();
   return useQuery(QK_TEMPLATES_ALL, () => services.data.getAllTemplates(), {
@@ -83,15 +82,13 @@ export function useAllTemplates(): UseQueryResult<ITemplateListItem[]> {
   });
 }
 
-/** Service-desk task queue (Tasks tab). */
-export function useTasks(): UseQueryResult<IServiceDeskTask[]> {
+export function useTasks(): UseQueryResult<IPagedResult<IServiceDeskTask>> {
   const services = useServices();
-  return useQuery(QK_TASKS, () => services.data.getTasks(), {
+  return useQuery(QK_TASKS, () => services.data.getTasksPaged(), {
     staleTime: OPERATIONAL_STALE_MS
   });
 }
 
-/** Curated Teams catalog for the Access wizard step and template editor. */
 export function useTeamsCatalog(): UseQueryResult<ITeamsCatalogItem[]> {
   const services = useServices();
   return useQuery(QK_TEAMS_CATALOG, () => services.data.getTeamsCatalog(), {
@@ -99,7 +96,6 @@ export function useTeamsCatalog(): UseQueryResult<ITeamsCatalogItem[]> {
   });
 }
 
-/** Curated SharePoint site catalog for the Access wizard step and template editor. */
 export function useSiteCatalog(): UseQueryResult<ISiteCatalogItem[]> {
   const services = useServices();
   return useQuery(QK_SITE_CATALOG, () => services.data.getSiteCatalog(), {
@@ -107,7 +103,6 @@ export function useSiteCatalog(): UseQueryResult<ISiteCatalogItem[]> {
   });
 }
 
-/** Curated application catalog for the Access wizard step and template editor. */
 export function useApplicationCatalog(): UseQueryResult<IApplicationCatalogItem[]> {
   const services = useServices();
   return useQuery(QK_APPLICATION_CATALOG, () => services.data.getApplicationCatalog(), {
@@ -115,7 +110,6 @@ export function useApplicationCatalog(): UseQueryResult<IApplicationCatalogItem[
   });
 }
 
-/** Every UPC_Roles row (including unconfigured ones) for the role-management UI. */
 export function useRoleDefinitionsForManagement(): UseQueryResult<IRoleManagementItem[]> {
   const services = useServices();
   return useQuery(QK_ROLES, () => services.data.getRoleDefinitionsForManagement(), {
@@ -123,13 +117,42 @@ export function useRoleDefinitionsForManagement(): UseQueryResult<IRoleManagemen
   });
 }
 
-export function useJobs(): UseQueryResult<IPagedResult<IProvisioningJob>> {
+export function useAllDelegations(): UseQueryResult<IApprovalDelegation[]> {
   const services = useServices();
-  const { jobsRefreshSeconds } = useSettings();
-  return useQuery(QK_JOBS, () => services.data.getJobsPaged(), {
-    // Poll fast while something is executing so the dashboard reads as live,
-    // fall back to the configured idle heartbeat (Settings tab).
-    refetchInterval: (data) =>
-      (data?.items ?? []).some((j) => j.status === 'Running') ? 5 * 1000 : jobsRefreshSeconds * 1000
+  return useQuery(QK_DELEGATIONS, () => services.data.getAllDelegations(), {
+    staleTime: OPERATIONAL_STALE_MS
   });
+}
+
+export function useJobSummaries(query: IJobQuery, enablePolling: boolean): UseQueryResult<IPagedResult<IJobSummary>> {
+  const services = useServices();
+  return useQuery(
+    [...QK_JOB_SUMMARIES, JSON.stringify(query)],
+    () => services.data.getJobSummariesPaged(query),
+    {
+      staleTime: OPERATIONAL_STALE_MS,
+      refetchInterval: enablePolling ? CHANGE_TOKEN_POLL_MS : false
+    }
+  );
+}
+
+export function useJobsChangeToken(enabled: boolean): UseQueryResult<{ latestModifiedUtc: string; runningCount: number }> {
+  const services = useServices();
+  return useQuery(QK_JOB_CHANGE_TOKEN, () => services.data.getJobsChangeToken(), {
+    enabled,
+    staleTime: 0,
+    refetchInterval: enabled ? CHANGE_TOKEN_POLL_MS : false
+  });
+}
+
+export function useJobDetail(itemId: number | null, pollWhileRunning: boolean): UseQueryResult<IProvisioningJob> {
+  const services = useServices();
+  return useQuery(
+    [...QK_JOB_DETAIL, itemId ?? 0],
+    () => services.data.getJob(itemId as number),
+    {
+      enabled: itemId !== null,
+      refetchInterval: pollWhileRunning ? CHANGE_TOKEN_POLL_MS : false
+    }
+  );
 }

@@ -1,8 +1,20 @@
 import { batchTyped, type GraphService } from '../graph/GraphService';
+import { GraphServiceError } from '../graph/GraphError';
+import type { SharePointDataService } from '../sharePointData/SharePointDataService';
 import type { TelemetryService } from '../telemetry/TelemetryService';
 import type { CapabilityId, ICapabilityCheck, IPreflightResult } from '../../models';
 
-/** Well-known Entra directory role template ids. */
+export const REQUIRED_GRAPH_SCOPES: string[] = [
+  'User.ReadWrite.All',
+  'GroupMember.ReadWrite.All',
+  'Organization.Read.All',
+  'Directory.Read.All',
+  'UserAuthenticationMethod.ReadWrite.All',
+  'Mail.Send',
+  'User.Invite.All',
+  'TeamMember.ReadWrite.All'
+];
+
 const ROLE_TEMPLATE: Record<string, string> = {
   globalAdministrator: '62e90394-69f5-4237-9190-012177145e10',
   userAdministrator: 'fe930be7-5e62-47db-91af-98c3a49a38b1',
@@ -18,15 +30,9 @@ interface ICapabilityRule {
   capability: CapabilityId;
   label: string;
   detail: string;
-  /** Holding any of these directory roles grants the capability. */
   satisfiedBy: string[];
 }
 
-/**
- * Capability → minimum Entra role matrix (spec Section 1). Global Admin
- * satisfies everything. Group/team-owner based access cannot be probed
- * cheaply and is mentioned in the detail text instead.
- */
 const CAPABILITY_RULES: ICapabilityRule[] = [
   {
     capability: 'createUsers',
@@ -56,10 +62,7 @@ const CAPABILITY_RULES: ICapabilityRule[] = [
     capability: 'tapCreation',
     label: 'Create Temporary Access Passes',
     detail: 'Requires the Authentication Administrator role.',
-    satisfiedBy: [
-      ROLE_TEMPLATE.authenticationAdministrator,
-      ROLE_TEMPLATE.privilegedAuthenticationAdministrator
-    ]
+    satisfiedBy: [ROLE_TEMPLATE.authenticationAdministrator, ROLE_TEMPLATE.privilegedAuthenticationAdministrator]
   },
   {
     capability: 'guestInvites',
@@ -79,18 +82,14 @@ interface IDirectoryRolesResponse {
   value: { roleTemplateId?: string; displayName?: string }[];
 }
 
-/**
- * Permission preflight, run at app load (spec Section 1). Read probes verify
- * the delegated grant is consented; the operator's active directory roles
- * (via /me/memberOf) determine which admin capabilities will actually work,
- * because delegated effective access = app scope ∩ operator privileges.
- */
 export class PreflightService {
   private readonly _graph: GraphService;
+  private readonly _data: SharePointDataService;
   private _telemetry: TelemetryService | undefined;
 
-  public constructor(graph: GraphService) {
+  public constructor(graph: GraphService, data: SharePointDataService) {
     this._graph = graph;
+    this._data = data;
   }
 
   public setTelemetry(telemetry: TelemetryService): void {
@@ -102,13 +101,11 @@ export class PreflightService {
     const started: number = Date.now();
 
     try {
-      const me: { userPrincipalName: string } = await this._graph.get<{
-        userPrincipalName: string;
-      }>('/me?$select=userPrincipalName', { signal });
+      const me: { userPrincipalName: string } = await this._graph.get<{ userPrincipalName: string }>(
+        '/me?$select=userPrincipalName',
+        { signal }
+      );
 
-      // Harmless read probes: prove consent for the read scopes we depend on.
-      // batchTyped keeps the id/url map in one typed object so a renamed or
-      // mistyped probe id fails to compile instead of silently reading undefined.
       const probes = await batchTyped(
         this._graph,
         {
@@ -135,24 +132,66 @@ export class PreflightService {
         ok: probeOk('skus')
       });
 
+      let sharePointReadOk: boolean = false;
+      try {
+        await this._data.getRoleDefinitions();
+        sharePointReadOk = true;
+      } catch {
+        sharePointReadOk = false;
+      }
+      checks.push({
+        capability: 'sharePointRead',
+        label: 'Read UPC lists',
+        detail: 'Cannot read the UPC SharePoint lists. Check list permissions.',
+        ok: sharePointReadOk
+      });
+
+      let sharePointWriteOk: boolean = false;
+      try {
+        await this._data.probeWriteAccess();
+        sharePointWriteOk = true;
+      } catch {
+        sharePointWriteOk = false;
+      }
+      checks.push({
+        capability: 'sharePointWrite',
+        label: 'Write to UPC lists',
+        detail: 'Cannot write the UPC SharePoint lists. Check list permissions.',
+        ok: sharePointWriteOk
+      });
+
+      let groupMemberReadOk: boolean = false;
+      try {
+        await this._graph.post<{ value: string[] }>(
+          '/me/checkMemberGroups',
+          { groupIds: ['00000000-0000-0000-0000-000000000000'] },
+          { signal }
+        );
+        groupMemberReadOk = true;
+      } catch (err) {
+        groupMemberReadOk = err instanceof GraphServiceError && err.statusCode === 403 ? false : true;
+      }
+      checks.push({
+        capability: 'groupMemberRead',
+        label: 'Read group membership',
+        detail: 'GroupMember.Read.All or Group.Read.All consent missing or denied.',
+        ok: groupMemberReadOk
+      });
+
       let templateIds: string[] = [];
       try {
         const roles: IDirectoryRolesResponse = await this._graph.get<IDirectoryRolesResponse>(
           '/me/memberOf/microsoft.graph.directoryRole?$select=displayName,roleTemplateId',
           { signal }
         );
-        templateIds = (roles.value ?? [])
-          .map((r) => r.roleTemplateId ?? '')
-          .filter((id) => id.length > 0);
+        templateIds = (roles.value ?? []).map((r) => r.roleTemplateId ?? '').filter((id) => id.length > 0);
       } catch {
-        // If we cannot enumerate roles, report the admin capabilities as unknown-missing.
         templateIds = [];
       }
       const isGlobalAdmin: boolean = templateIds.indexOf(ROLE_TEMPLATE.globalAdministrator) !== -1;
 
       for (const rule of CAPABILITY_RULES) {
-        const ok: boolean =
-          isGlobalAdmin || rule.satisfiedBy.some((id) => templateIds.indexOf(id) !== -1);
+        const ok: boolean = isGlobalAdmin || rule.satisfiedBy.some((id) => templateIds.indexOf(id) !== -1);
         checks.push({ capability: rule.capability, label: rule.label, detail: rule.detail, ok });
       }
 
@@ -160,16 +199,13 @@ export class PreflightService {
         checks,
         missing: checks.filter((c) => !c.ok),
         directoryRoleTemplateIds: templateIds,
-        operatorUpn: me.userPrincipalName
+        operatorUpn: me.userPrincipalName,
+        requiredGraphScopes: REQUIRED_GRAPH_SCOPES
       };
       if (this._telemetry) {
         this._telemetry.trackEvent(
           'preflight.run',
-          {
-            operatorUpn: me.userPrincipalName,
-            missingCount: result.missing.length,
-            globalAdmin: isGlobalAdmin
-          },
+          { operatorUpn: me.userPrincipalName, missingCount: result.missing.length, globalAdmin: isGlobalAdmin },
           'info'
         );
       }

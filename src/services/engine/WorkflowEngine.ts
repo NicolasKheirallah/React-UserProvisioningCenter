@@ -1,12 +1,14 @@
 import type { GraphService } from '../graph/GraphService';
-import type { SharePointDataService } from '../sharePointData/SharePointDataService';
+import type { SharePointDataService, ICreateJobInput } from '../sharePointData/SharePointDataService';
 import type { AuditService } from '../audit/AuditService';
 import type { NamingPolicyService } from '../namingPolicy/NamingPolicyService';
 import type { UserService } from '../users/UserService';
 import type { SiteAccessService } from '../sites/SiteAccessService';
 import type { TelemetryService } from '../telemetry/TelemetryService';
 import { GraphServiceError, RequestAbortedError } from '../graph/GraphError';
+import type { IAuthorizationService } from './IAuthorizationService';
 import { generateTempPassword } from '../passwords/passwordGenerator';
+import { newGuid } from '../util/guid';
 import type { IAppSettings, IJobStep, IProvisioningJob, JobType } from '../../models';
 import { DEFAULT_APP_SETTINGS, isOnboardingPayload } from '../../models';
 import { assertTransition, canStartJob } from './jobStateMachine';
@@ -27,42 +29,40 @@ export interface IEngineDependencies {
   naming: NamingPolicyService;
   users: UserService;
   siteAccess: SiteAccessService;
-  /** Optional tenant settings; defaults apply when absent (engine-only callers in tests). */
+  auth: IAuthorizationService;
+  operatorUpn: string;
+  operatorDisplayName?: string;
   settings?: IAppSettings;
-  /** Optional telemetry sink; null-safe when omitted. */
   telemetry?: TelemetryService;
 }
 
 export interface IEngineCallbacks {
-  /** Fired after every persisted state change — drives the live progress UI. */
   onJobUpdated?: (job: IProvisioningJob) => void;
-  /** Copy-once credential hand-off; resolves when the operator confirms. */
   presentCredentials?: (credential: ICredentialPresentation) => Promise<void>;
 }
 
 export interface IEngineOptions {
-  /** Base for exponential backoff between step attempts (test override). */
   stepBackoffBaseMs?: number;
 }
 
-/**
- * Client-side provisioning engine (spec Section 6). Steps execute
- * sequentially in the operator's browser session; each is idempotent and
- * state is persisted to StepsJson after every attempt, so a closed tab
- * resumes cleanly from the first non-completed step.
- */
+export interface ICreateJobRequest {
+  jobType: JobType;
+  payload: ICreateJobInput['payload'];
+  steps: IJobStep[];
+  scheduledFor: string | null;
+  initialStatus?: 'PendingApproval' | 'Approved';
+}
+
+export interface IApprovalOutcome {
+  satisfied: boolean;
+  granted: number;
+  required: number;
+}
+
 export class WorkflowEngine {
   private readonly _deps: IEngineDependencies;
   private readonly _backoffBaseMs: number;
   private readonly _runningItems: Set<number> = new Set();
-  /**
-   * Steps flagged for skip while their job's _execute() loop is already
-   * in-flight. SPFx's Graph client gives no real request cancellation (only
-   * cooperative AbortSignal checks between attempts), so a step's in-flight
-   * call can still resolve successfully after skipStep() has already
-   * persisted 'skipped' for it. _runStepWithRetries consults this before
-   * persisting 'completed'/'failed' so that write can't clobber the skip.
-   */
   private readonly _pendingSkips: Map<number, Set<string>> = new Map();
   private _settings: IAppSettings;
 
@@ -72,12 +72,10 @@ export class WorkflowEngine {
     this._settings = deps.settings ?? DEFAULT_APP_SETTINGS;
   }
 
-  /** Update tenant settings at runtime (SettingsContext calls this on load/change). */
   public updateSettings(settings: IAppSettings): void {
     this._settings = settings;
   }
 
-  /** Initial StepsJson content for a new job of the given type. */
   public buildInitialSteps(jobType: JobType = 'Onboard'): IJobStep[] {
     return stepsForJobType(jobType).map((definition) => ({
       stepId: definition.id,
@@ -95,47 +93,64 @@ export class WorkflowEngine {
     return this._runningItems.has(itemId);
   }
 
-  /** Start or resume a job. Refuses anything the state machine says is not startable. */
-  public async runJob(
-    itemId: number,
-    callbacks?: IEngineCallbacks,
-    signal?: AbortSignal
-  ): Promise<IProvisioningJob> {
-    if (this._runningItems.has(itemId)) {
-      throw new Error(`Job ${itemId} is already running in this session`);
-    }
-    this._runningItems.add(itemId);
-    const started: number = Date.now();
+  public async createJob(request: ICreateJobRequest): Promise<number> {
+    await this._deps.auth.require('createJobs');
+    const jobId: string = newGuid();
+    const input: ICreateJobInput = {
+      jobId,
+      jobType: request.jobType,
+      payload: request.payload,
+      steps: request.steps,
+      scheduledFor: request.scheduledFor,
+      correlationId: newGuid(),
+      targetUpn: targetUserOf(request.payload),
+      initialStatus: request.initialStatus
+    };
+    return this._deps.data.createJob(input);
+  }
+
+  private async _withLock<T>(itemId: number, fn: (instanceId: string, initialEtag: string) => Promise<T>): Promise<T> {
+    const instanceId: string = newGuid();
+    const etag: string = await this._deps.data.acquireJobLock(itemId, instanceId);
     try {
-      const job: IProvisioningJob = await this._execute(itemId, callbacks, signal);
-      if (this._deps.telemetry) {
-        this._deps.telemetry.trackEvent(
-          'engine.runJob.complete',
-          {
-            jobId: job.jobId,
-            jobType: job.jobType,
-            status: job.status,
-            durationMs: Date.now() - started
-          },
-          job.status === 'Completed' ? 'info' : 'warning'
-        );
-      }
-      return job;
-    } catch (err) {
-      if (this._deps.telemetry && !(err instanceof RequestAbortedError)) {
-        this._deps.telemetry.trackError(err, {
-          jobId: String(itemId),
-          durationMs: Date.now() - started
-        });
-      }
-      throw err;
+      return await fn(instanceId, etag);
     } finally {
-      this._runningItems.delete(itemId);
-      this._pendingSkips.delete(itemId);
+      await this._deps.data.releaseJobLock(itemId, instanceId).catch(() => undefined);
     }
   }
 
-  /** Manual retry: reset the failed step and resume the job. */
+  public async runJob(itemId: number, callbacks?: IEngineCallbacks, signal?: AbortSignal): Promise<IProvisioningJob> {
+    if (this._runningItems.has(itemId)) {
+      throw new Error(`Job ${itemId} is already running in this session`);
+    }
+    await this._deps.auth.require('runJobs');
+    const started: number = Date.now();
+    try {
+      return await this._withLock(itemId, async (_instanceId, etag) => {
+        this._runningItems.add(itemId);
+        try {
+          const job: IProvisioningJob = await this._execute(itemId, callbacks, signal, etag);
+          if (this._deps.telemetry) {
+            this._deps.telemetry.trackEvent(
+              'engine.runJob.complete',
+              { jobId: job.jobId, jobType: job.jobType, status: job.status, durationMs: Date.now() - started },
+              job.status === 'Completed' ? 'info' : 'warning'
+            );
+          }
+          return job;
+        } finally {
+          this._runningItems.delete(itemId);
+          this._pendingSkips.delete(itemId);
+        }
+      });
+    } catch (err) {
+      if (this._deps.telemetry && !(err instanceof RequestAbortedError)) {
+        this._deps.telemetry.trackError(err, { jobId: String(itemId), durationMs: Date.now() - started });
+      }
+      throw err;
+    }
+  }
+
   public async retryStep(
     itemId: number,
     stepId: string,
@@ -143,75 +158,92 @@ export class WorkflowEngine {
     signal?: AbortSignal
   ): Promise<IProvisioningJob> {
     if (this._runningItems.has(itemId)) {
-      // A failed, non-continuable step blocks the pipeline before the loop
-      // reaches later steps, but continueOnFailure steps let it run past a
-      // failure — so a failed step's job can still be actively executing.
-      // Reject outright rather than writing StepsJson underneath the
-      // in-flight run's own full-array persists (no ETag/optimistic
-      // concurrency exists on that write to arbitrate a real race).
       throw new Error(`Job ${itemId} is currently running — wait for it to finish before retrying a step`);
     }
-    const job: IProvisioningJob = await this._deps.data.getJob(itemId);
-    const step: IJobStep | undefined = job.steps.filter((s) => s.stepId === stepId)[0];
-    if (!step || step.status !== 'failed') {
-      throw new Error(`Step ${stepId} is not in a retryable state`);
-    }
-    step.status = 'pending';
-    step.attempts = 0;
-    step.lastError = null;
-    step.startedUtc = null;
-    step.completedUtc = null;
-    await this._deps.data.updateJobSteps(itemId, job.steps);
-    return this.runJob(itemId, callbacks, signal);
+    await this._deps.auth.require('retrySteps');
+    return this._withLock(itemId, async (_instanceId, lockEtag) => {
+      this._runningItems.add(itemId);
+      try {
+        const job: IProvisioningJob = await this._deps.data.getJob(itemId);
+        const step: IJobStep | undefined = job.steps.filter((s) => s.stepId === stepId)[0];
+        if (!step || step.status !== 'failed') {
+          throw new Error(`Step ${stepId} is not in a retryable state`);
+        }
+        step.status = 'pending';
+        step.attempts = 0;
+        step.lastError = null;
+        step.startedUtc = null;
+        step.completedUtc = null;
+        const etag: string = await this._deps.data.updateJobSteps(itemId, job.steps, lockEtag);
+        return await this._execute(itemId, callbacks, signal, etag);
+      } finally {
+        this._runningItems.delete(itemId);
+        this._pendingSkips.delete(itemId);
+      }
+    });
   }
 
-  /** Skip a failed or running step, when its definition allows it, then resume. */
   public async skipStep(
     itemId: number,
     stepId: string,
     callbacks?: IEngineCallbacks,
     signal?: AbortSignal
   ): Promise<IProvisioningJob> {
-    const job: IProvisioningJob = await this._deps.data.getJob(itemId);
-    const step: IJobStep | undefined = job.steps.filter((s) => s.stepId === stepId)[0];
-    if (!step || !step.skippable) {
-      throw new Error(`Step ${stepId} is not skippable`);
-    }
-    // Flag the skip BEFORE writing it, while the job is still running: if
-    // the in-flight step's Graph call is already in flight (the common
-    // case — see the class comment on _pendingSkips), _runStepWithRetries
-    // checks this flag before it would otherwise persist 'completed'/
-    // 'failed' over the top of this skip.
+    await this._deps.auth.require('skipSteps');
     const runningNow: boolean = this._runningItems.has(itemId);
+
     if (runningNow) {
+      const job: IProvisioningJob = await this._deps.data.getJob(itemId);
+      const step: IJobStep | undefined = job.steps.filter((s) => s.stepId === stepId)[0];
+      if (!step || !step.skippable) {
+        throw new Error(`Step ${stepId} is not skippable`);
+      }
       const pending: Set<string> = this._pendingSkips.get(itemId) ?? new Set<string>();
       pending.add(stepId);
       this._pendingSkips.set(itemId, pending);
-    }
-    step.status = 'skipped';
-    step.completedUtc = new Date().toISOString();
-    await this._deps.data.updateJobSteps(itemId, job.steps);
-    await this._deps.audit.log({
-      jobId: job.jobId,
-      action: `skip-step:${stepId}`,
-      targetUser: targetUserOf(job.payload),
-      graphEndpoint: '',
-      requestSummary: '{}',
-      responseCode: 0,
-      durationMs: 0,
-      result: 'Skipped',
-      correlationId: job.correlationId
-    });
-    // If the job is already running in this session (the operator clicked
-    // Skip on a running step), the in-flight pass owns persisting further
-    // progress — don't start a second concurrent run.
-    if (runningNow) {
+      step.status = 'skipped';
+      step.completedUtc = new Date().toISOString();
+      await this._deps.data.updateJobSteps(itemId, job.steps);
+      await this._deps.audit.log({
+        jobId: job.jobId,
+        action: `skip-step:${stepId}`,
+        targetUser: targetUserOf(job.payload),
+        graphEndpoint: '',
+        requestSummary: '{}',
+        responseCode: 0,
+        durationMs: 0,
+        result: 'Skipped',
+        correlationId: job.correlationId
+      });
       return job;
     }
+
+    await this._withLock(itemId, async (_instanceId, lockEtag) => {
+      const job: IProvisioningJob = await this._deps.data.getJob(itemId);
+      const step: IJobStep | undefined = job.steps.filter((s) => s.stepId === stepId)[0];
+      if (!step || !step.skippable) {
+        throw new Error(`Step ${stepId} is not skippable`);
+      }
+      step.status = 'skipped';
+      step.completedUtc = new Date().toISOString();
+      await this._deps.data.updateJobSteps(itemId, job.steps, lockEtag);
+      await this._deps.audit.log({
+        jobId: job.jobId,
+        action: `skip-step:${stepId}`,
+        targetUser: targetUserOf(job.payload),
+        graphEndpoint: '',
+        requestSummary: '{}',
+        responseCode: 0,
+        durationMs: 0,
+        result: 'Skipped',
+        correlationId: job.correlationId
+      });
+    });
     return this.runJob(itemId, callbacks, signal);
   }
 
   public async cancelJob(itemId: number): Promise<void> {
+    await this._deps.auth.require('cancelJobs');
     const job: IProvisioningJob = await this._deps.data.getJob(itemId);
     assertTransition(job.status, 'Cancelled');
     await this._deps.data.updateJobStatus(itemId, 'Cancelled');
@@ -228,17 +260,35 @@ export class WorkflowEngine {
     });
   }
 
-  /**
-   * Re-issues the target user's temporary password (or TAP) for a completed
-   * onboarding/clone job — e.g. the operator lost the original one-time
-   * hand-off. Not a pipeline step: it doesn't touch StepsJson or job status,
-   * only writes a fresh credential to Graph and hands it to the caller once.
-   */
-  public async regenerateCredentials(
-    itemId: number,
-    callbacks?: IEngineCallbacks,
-    signal?: AbortSignal
-  ): Promise<void> {
+  public async approveJob(itemId: number, onBehalfOf?: string): Promise<IApprovalOutcome> {
+    await this._deps.auth.require('approveJobs');
+    const job: IProvisioningJob = await this._deps.data.getJob(itemId);
+    const result = await this._deps.data.recordApproval(
+      itemId,
+      {
+        actor: this._deps.operatorDisplayName ?? this._deps.operatorUpn,
+        actorUpn: this._deps.operatorUpn,
+        timestampUtc: new Date().toISOString(),
+        onBehalfOf
+      },
+      this._settings.requiredApprovals
+    );
+    await this._deps.audit.log({
+      jobId: job.jobId,
+      action: result.satisfied ? 'approve-job' : 'approve-job-partial',
+      targetUser: targetUserOf(job.payload),
+      graphEndpoint: '',
+      requestSummary: JSON.stringify({ granted: result.granted, required: result.required, onBehalfOf: onBehalfOf ?? null }),
+      responseCode: 0,
+      durationMs: 0,
+      result: 'Success',
+      correlationId: job.correlationId
+    });
+    return result;
+  }
+
+  public async regenerateCredentials(itemId: number, callbacks?: IEngineCallbacks, signal?: AbortSignal): Promise<void> {
+    await this._deps.auth.require('runJobs');
     const job: IProvisioningJob = await this._deps.data.getJob(itemId);
     if (job.status !== 'Completed' && job.status !== 'PartiallyFailed') {
       throw new Error('Credentials can only be regenerated for a completed job');
@@ -266,15 +316,15 @@ export class WorkflowEngine {
     try {
       let value: string;
       if (mode === 'tap') {
-        const existing: { value: { id: string }[] } = await this._deps.graph.get<{
-          value: { id: string }[];
-        }>(endpoint, { signal });
+        const existing: { value: { id: string }[] } = await this._deps.graph.get<{ value: { id: string }[] }>(endpoint, { signal });
         for (const method of existing.value ?? []) {
           await this._deps.graph.delete<void>(`${endpoint}/${method.id}`, { signal });
         }
-        const created: { temporaryAccessPass: string } = await this._deps.graph.post<{
-          temporaryAccessPass: string;
-        }>(endpoint, {}, { signal });
+        const created: { temporaryAccessPass: string } = await this._deps.graph.post<{ temporaryAccessPass: string }>(
+          endpoint,
+          {},
+          { signal }
+        );
         value = created.temporaryAccessPass;
       } else {
         value = generateTempPassword();
@@ -298,9 +348,7 @@ export class WorkflowEngine {
         throw err;
       }
       const graphError: GraphServiceError =
-        err instanceof GraphServiceError
-          ? err
-          : new GraphServiceError((err as Error)?.message ?? 'Unknown error', 0, 'UnknownError', '');
+        err instanceof GraphServiceError ? err : new GraphServiceError((err as Error)?.message ?? 'Unknown error', 0, 'UnknownError', '');
       await this._deps.audit.log({
         jobId: job.jobId,
         action: 'regenerate-credentials',
@@ -319,23 +367,22 @@ export class WorkflowEngine {
   private async _execute(
     itemId: number,
     callbacks?: IEngineCallbacks,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    initialEtag?: string
   ): Promise<IProvisioningJob> {
     const job: IProvisioningJob = await this._deps.data.getJob(itemId);
     if (!canStartJob(job.status)) {
-      throw new Error(
-        `Job ${job.jobId} cannot start from status ${job.status} — approval is required first`
-      );
+      throw new Error(`Job ${job.jobId} cannot start from status ${job.status} — approval is required first`);
     }
+
+    let etag: string = initialEtag ?? '*';
     if (job.status !== 'Running') {
       assertTransition(job.status, 'Running');
-      await this._deps.data.updateJobStatus(itemId, 'Running');
+      etag = await this._deps.data.updateJobStatus(itemId, 'Running', etag);
       job.status = 'Running';
       callbacks?.onJobUpdated?.(job);
     }
 
-    // Merge persisted step state with the registry (registry order wins; new
-    // steps added by an upgrade appear as pending).
     const pipeline = stepsForJobType(job.jobType);
     const persisted: Map<string, IJobStep> = new Map(job.steps.map((s) => [s.stepId, s]));
     job.steps = pipeline.map(
@@ -378,7 +425,6 @@ export class WorkflowEngine {
         continue;
       }
       if (state.status === 'failed' && state.attempts >= state.maxAttempts) {
-        // Exhausted in an earlier session; manual retry/skip is the only way on.
         if (!definition.continueOnFailure) {
           blocked = true;
           break;
@@ -387,10 +433,9 @@ export class WorkflowEngine {
       }
 
       try {
-        await this._runStepWithRetries(definition, state, ctx, itemId, callbacks, signal);
+        etag = await this._runStepWithRetries(definition, state, ctx, itemId, callbacks, signal, etag);
       } catch (err) {
         if (err instanceof RequestAbortedError) {
-          // Leave the job Running; the persisted StepsJson resumes it later.
           return job;
         }
         throw err;
@@ -403,26 +448,20 @@ export class WorkflowEngine {
     }
 
     const anyFailed: boolean = job.steps.some((s) => s.status === 'failed');
-    const allDone: boolean = job.steps.every(
-      (s) => s.status === 'completed' || s.status === 'skipped'
-    );
-    // When a non-continuable step fails and blocks the pipeline, the job is
-    // Failed (no further progress possible without manual retry). When some
-    // steps failed but the pipeline continued (continueOnFailure), the job
-    // is PartiallyFailed. When all steps completed/skipped, it's Completed.
-    const finalStatus: IProvisioningJob['status'] = allDone
-      ? 'Completed'
-      : blocked && !anyFailed
-        ? 'PartiallyFailed'
-        : blocked && anyFailed
-          ? 'Failed'
-          : anyFailed
-            ? 'PartiallyFailed'
-            : 'Completed';
+    const allDone: boolean = job.steps.every((s) => s.status === 'completed' || s.status === 'skipped');
+    let finalStatus: IProvisioningJob['status'];
+    if (allDone) {
+      finalStatus = 'Completed';
+    } else if (blocked && anyFailed) {
+      finalStatus = 'Failed';
+    } else if (blocked || anyFailed) {
+      finalStatus = 'PartiallyFailed';
+    } else {
+      finalStatus = 'Completed';
+    }
     assertTransition(job.status, finalStatus);
-    await this._deps.data.updateJobStatus(itemId, finalStatus);
+    etag = await this._deps.data.updateJobStatus(itemId, finalStatus, etag);
     job.status = finalStatus;
-    // Wipe in-memory secrets as soon as the run ends.
     delete secrets.temporaryPassword;
     delete secrets.temporaryAccessPass;
     callbacks?.onJobUpdated?.(job);
@@ -435,39 +474,32 @@ export class WorkflowEngine {
     ctx: IStepContext,
     itemId: number,
     callbacks?: IEngineCallbacks,
-    signal?: AbortSignal
-  ): Promise<void> {
+    signal?: AbortSignal,
+    etag?: string
+  ): Promise<string> {
     while (state.attempts < state.maxAttempts) {
       state.status = 'running';
       if (!state.startedUtc) {
         state.startedUtc = new Date().toISOString();
       }
-      await this._persist(itemId, ctx.job, callbacks);
+      etag = await this._persist(itemId, ctx.job, callbacks, etag);
 
       try {
         await definition.run(ctx);
         if (this._consumePendingSkip(itemId, definition.id)) {
-          // skipStep() already persisted 'skipped' for this step while this
-          // call was in flight — its own write is authoritative; don't
-          // clobber it by persisting 'completed' here too.
           state.status = 'skipped';
           state.completedUtc = state.completedUtc ?? new Date().toISOString();
-          return;
+          return etag;
         }
         state.status = 'completed';
         state.completedUtc = new Date().toISOString();
         state.lastError = null;
-        await this._persist(itemId, ctx.job, callbacks);
-        return;
+        etag = await this._persist(itemId, ctx.job, callbacks, etag);
+        return etag;
       } catch (err) {
         if (err instanceof RequestAbortedError) {
-          // The operator may have skipped this step while it was running.
-          // Re-read the persisted state: if it was skipped, honor that;
-          // otherwise reset to pending so a resume picks it up again.
           const refreshed: IProvisioningJob = await this._deps.data.getJob(itemId);
-          const refreshedStep: IJobStep | undefined = refreshed.steps.filter(
-            (s) => s.stepId === definition.id
-          )[0];
+          const refreshedStep: IJobStep | undefined = refreshed.steps.filter((s) => s.stepId === definition.id)[0];
           this._consumePendingSkip(itemId, definition.id);
           if (refreshedStep && refreshedStep.status === 'skipped') {
             state.status = 'skipped';
@@ -475,35 +507,29 @@ export class WorkflowEngine {
           } else {
             state.status = 'pending';
           }
-          await this._persist(itemId, ctx.job, callbacks);
+          etag = await this._persist(itemId, ctx.job, callbacks, etag);
           throw err;
         }
         if (this._consumePendingSkip(itemId, definition.id)) {
           state.status = 'skipped';
           state.completedUtc = state.completedUtc ?? new Date().toISOString();
-          return;
+          return etag;
         }
         const failure: StepFailure =
-          err instanceof StepFailure
-            ? err
-            : new StepFailure((err as Error)?.message ?? 'Unknown error', 'UnknownError', false);
+          err instanceof StepFailure ? err : new StepFailure((err as Error)?.message ?? 'Unknown error', 'UnknownError', false);
         state.attempts += 1;
         state.status = 'failed';
-        state.lastError = {
-          graphCode: failure.graphCode,
-          message: failure.message,
-          retryable: failure.retryable
-        };
-        await this._persist(itemId, ctx.job, callbacks);
+        state.lastError = { graphCode: failure.graphCode, message: failure.message, retryable: failure.retryable };
+        etag = await this._persist(itemId, ctx.job, callbacks, etag);
         if (!failure.retryable || state.attempts >= state.maxAttempts) {
-          return;
+          return etag;
         }
         await delay(this._backoffBaseMs * Math.pow(2, state.attempts - 1), signal);
       }
     }
+    return etag ?? '*';
   }
 
-  /** Returns true and clears the flag if stepId was skipped mid-flight for itemId. */
   private _consumePendingSkip(itemId: number, stepId: string): boolean {
     const pending: Set<string> | undefined = this._pendingSkips.get(itemId);
     if (!pending || !pending.has(stepId)) {
@@ -516,12 +542,9 @@ export class WorkflowEngine {
     return true;
   }
 
-  private async _persist(
-    itemId: number,
-    job: IProvisioningJob,
-    callbacks?: IEngineCallbacks
-  ): Promise<void> {
-    await this._deps.data.updateJobSteps(itemId, job.steps);
+  private async _persist(itemId: number, job: IProvisioningJob, callbacks?: IEngineCallbacks, etag?: string): Promise<string> {
+    const newEtag = await this._deps.data.updateJobSteps(itemId, job.steps, etag);
     callbacks?.onJobUpdated?.(job);
+    return newEtag;
   }
 }

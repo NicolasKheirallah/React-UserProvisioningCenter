@@ -6,6 +6,7 @@ import type { SharePointDataService } from '../sharePointData/SharePointDataServ
 import type { NamingPolicyService } from '../namingPolicy/NamingPolicyService';
 import type { UserService } from '../users/UserService';
 import type { SiteAccessService } from '../sites/SiteAccessService';
+import type { IAuthorizationService } from './IAuthorizationService';
 import type { IAuditEntry, IJobStep, IOnboardingPayload, IProvisioningJob, JobStatus } from '../../models';
 
 type Handler = (path: string, body?: unknown) => unknown;
@@ -30,7 +31,21 @@ class MockGraph {
   public patch = async (path: string, body: unknown): Promise<unknown> => this._dispatch('PATCH', path, body);
   public put = async (path: string, body: unknown): Promise<unknown> => this._dispatch('PUT', path, body);
   public delete = async (path: string): Promise<unknown> => this._dispatch('DELETE', path);
-  public batch = async (): Promise<Map<string, unknown>> => new Map();
+  public batch = async (
+    requests: { id: string; method: string; url: string; body?: unknown }[]
+  ): Promise<Map<string, { id: string; status: number; body: unknown }>> => {
+    const map = new Map<string, { id: string; status: number; body: unknown }>();
+    for (const req of requests) {
+      try {
+        const body = await this._dispatch(req.method, req.url, req.body);
+        map.set(req.id, { id: req.id, status: 200, body });
+      } catch (err) {
+        const status = err instanceof GraphServiceError ? err.statusCode : 500;
+        map.set(req.id, { id: req.id, status, body: {} });
+      }
+    }
+    return map;
+  };
 
   public countCalls(method: string, pathPrefix: string): number {
     return this.calls.filter((c) => c.method === method && c.path.startsWith(pathPrefix)).length;
@@ -57,29 +72,38 @@ class MockData {
     status: this.status,
     payload: JSON.parse(JSON.stringify(this._payload)),
     steps: JSON.parse(this.stepsJson),
+    approvals: [],
     scheduledFor: null,
     requestedBy: 'HR Person',
     approvedBy: null,
     correlationId: 'corr-1',
+    targetUpn: '',
     targetUserId: this.targetUserId,
-    createdUtc: '2026-01-01T00:00:00Z'
+    createdUtc: '2026-01-01T00:00:00Z',
+    modifiedUtc: '2026-01-01T00:00:00Z'
   });
 
-  public updateJobStatus = async (_itemId: number, status: JobStatus): Promise<void> => {
+  public updateJobStatus = async (_itemId: number, status: JobStatus): Promise<string> => {
     this.status = status;
+    return '*';
   };
 
-  public updateJobSteps = async (_itemId: number, steps: IJobStep[]): Promise<void> => {
+  public updateJobSteps = async (_itemId: number, steps: IJobStep[]): Promise<string> => {
     this.stepsJson = JSON.stringify(steps);
+    return '*';
   };
 
-  public setJobTargetUser = async (_itemId: number, userId: string): Promise<void> => {
+  public setJobTargetUser = async (_itemId: number, userId: string): Promise<string> => {
     this.targetUserId = userId;
+    return '*';
   };
 
   public addAuditEntry = async (entry: IAuditEntry): Promise<void> => {
     this.auditEntries.push(entry);
   };
+
+  public acquireJobLock = async (): Promise<string> => '*';
+  public releaseJobLock = async (): Promise<void> => undefined;
 
   public steps(): IJobStep[] {
     return JSON.parse(this.stepsJson);
@@ -148,7 +172,9 @@ function makeHarness(status: JobStatus): IHarness {
       audit,
       naming,
       users,
-      siteAccess
+      siteAccess,
+      auth: { require: async () => undefined } as unknown as IAuthorizationService,
+      operatorUpn: 'operator@contoso.com'
     },
     { stepBackoffBaseMs: 1 }
   );

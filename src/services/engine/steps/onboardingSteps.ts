@@ -20,6 +20,8 @@ import {
   STEP_VALIDATE_INPUT
 } from '../../../constants/stepIds';
 import { RequestAbortedError } from '../../graph/GraphError';
+import type { IBatchRequest } from '../../graph/GraphService';
+import { checkMemberGroups } from '../../graph/checkMemberGroups';
 import { StepFailure } from '../stepTypes';
 import type { IStepContext, IWorkflowStepDefinition } from '../stepTypes';
 import { auditedGraphWrite, getOrNull, runFinalizeAudit } from '../stepHelpers';
@@ -27,10 +29,7 @@ import { isOnboardingPayload } from '../../../models';
 import type { IApplicationCatalogItem, IOnboardingPayload, UpnAvailability } from '../../../models';
 import { escapeODataLiteral } from '../../util/odata';
 
-/**
- * Every step is idempotent (check-before-write) so a resumed job never
- * repeats a completed side effect (spec Section 6).
- */
+const BATCH_SIZE: number = 20;
 
 async function requireTargetUser(ctx: IStepContext): Promise<string> {
   if (!ctx.job.targetUserId) {
@@ -39,7 +38,6 @@ async function requireTargetUser(ctx: IStepContext): Promise<string> {
   return ctx.job.targetUserId;
 }
 
-/** Narrows the job payload; these steps only ever run for Onboard jobs. */
 function onboarding(ctx: IStepContext): IOnboardingPayload {
   const payload = ctx.job.payload;
   if (!isOnboardingPayload(payload)) {
@@ -48,50 +46,27 @@ function onboarding(ctx: IStepContext): IOnboardingPayload {
   return payload;
 }
 
-// ---- validate-input --------------------------------------------------------
-
 async function runValidateInput(ctx: IStepContext): Promise<void> {
   const payload: IOnboardingPayload = onboarding(ctx);
   const errors: string[] = validatePayload(payload);
   if (errors.length > 0) {
     throw new StepFailure(`Payload validation failed: ${errors.join('; ')}`, 'UPC_InvalidPayload', false);
   }
-  // Directory checks only apply while the user does not exist yet — on resume
-  // after create-user we would collide with the account we just created.
   if (ctx.job.targetUserId) {
     return;
   }
   if (payload.identity.accountType === 'guest') {
-    // Guests aren't subject to the employeeId/UPN acceptance gate — they're
-    // not employees and Entra assigns their actual #EXT# UPN on redemption,
-    // not the email address the operator entered.
     return;
   }
-  const employeeIdTaken: boolean = await ctx.users.isEmployeeIdTaken(
-    payload.personal.employeeId,
-    ctx.signal
-  );
+  const employeeIdTaken: boolean = await ctx.users.isEmployeeIdTaken(payload.personal.employeeId, ctx.signal);
   if (employeeIdTaken) {
-    throw new StepFailure(
-      `employeeId ${payload.personal.employeeId} already exists in the directory`,
-      'UPC_DuplicateEmployeeId',
-      false
-    );
+    throw new StepFailure(`employeeId ${payload.personal.employeeId} already exists in the directory`, 'UPC_DuplicateEmployeeId', false);
   }
-  const availability: UpnAvailability = await ctx.naming.checkUpnAvailability(
-    payload.identity.userPrincipalName,
-    ctx.signal
-  );
+  const availability: UpnAvailability = await ctx.naming.checkUpnAvailability(payload.identity.userPrincipalName, ctx.signal);
   if (availability !== 'available') {
-    throw new StepFailure(
-      `UPN ${payload.identity.userPrincipalName} is no longer available (${availability})`,
-      'UPC_UpnCollision',
-      false
-    );
+    throw new StepFailure(`UPN ${payload.identity.userPrincipalName} is no longer available (${availability})`, 'UPC_UpnCollision', false);
   }
 }
-
-// ---- create-user -----------------------------------------------------------
 
 interface ICreatedUser {
   id: string;
@@ -103,7 +78,6 @@ async function runCreateUser(ctx: IStepContext): Promise<void> {
     return runInviteGuest(ctx, payload);
   }
 
-  // Idempotency 1: a previous attempt already recorded the created user.
   if (ctx.job.targetUserId) {
     const existing: ICreatedUser | null = await getOrNull(() =>
       ctx.graph.get<ICreatedUser>(`/users/${ctx.job.targetUserId}?$select=id`, { signal: ctx.signal })
@@ -111,15 +85,11 @@ async function runCreateUser(ctx: IStepContext): Promise<void> {
     if (existing) {
       return;
     }
-    // Recorded id no longer resolves (deleted out-of-band) — fall through and recreate.
   }
 
-  // Idempotency 2: the POST may have succeeded although the response was lost.
   const upn: string = payload.identity.userPrincipalName;
   const byUpn: { value: ICreatedUser[] } = await ctx.graph.get<{ value: ICreatedUser[] }>(
-    `/users?$select=id&$filter=${encodeURIComponent(
-      `userPrincipalName eq '${escapeODataLiteral(upn)}'`
-    )}`,
+    `/users?$select=id&$filter=${encodeURIComponent(`userPrincipalName eq '${escapeODataLiteral(upn)}'`)}`,
     { signal: ctx.signal }
   );
   if ((byUpn.value ?? []).length > 0) {
@@ -136,10 +106,7 @@ async function runCreateUser(ctx: IStepContext): Promise<void> {
     displayName: payload.personal.displayName,
     mailNickname: payload.identity.mailNickname,
     userPrincipalName: upn,
-    passwordProfile: {
-      password,
-      forceChangePasswordNextSignIn: payload.accountSettings.forceChangePassword
-    },
+    passwordProfile: { password, forceChangePasswordNextSignIn: payload.accountSettings.forceChangePassword },
     department: payload.employment.department,
     jobTitle: payload.employment.jobTitle,
     officeLocation: payload.employment.officeLocation || undefined,
@@ -147,33 +114,19 @@ async function runCreateUser(ctx: IStepContext): Promise<void> {
     country: payload.employment.country || undefined,
     usageLocation: payload.accountSettings.usageLocation,
     employeeId: payload.personal.employeeId,
-    employeeHireDate: payload.employment.hireDate
-      ? `${payload.employment.hireDate}T00:00:00Z`
-      : undefined,
+    employeeHireDate: payload.employment.hireDate ? `${payload.employment.hireDate}T00:00:00Z` : undefined,
     employeeType: payload.employment.employeeType,
     mobilePhone: payload.personal.mobilePhone || undefined,
     otherMails: payload.personal.personalEmail ? [payload.personal.personalEmail] : undefined
   };
 
-  const created: ICreatedUser = await auditedGraphWrite(
-    ctx,
-    'create-user',
-    'POST',
-    '/users',
-    body,
-    () => ctx.graph.post<ICreatedUser>('/users', body, { signal: ctx.signal })
+  const created: ICreatedUser = await auditedGraphWrite(ctx, 'create-user', 'POST', '/users', body, () =>
+    ctx.graph.post<ICreatedUser>('/users', body, { signal: ctx.signal })
   );
   ctx.job.targetUserId = created.id;
   await ctx.data.setJobTargetUser(ctx.job.itemId, created.id);
 }
 
-/**
- * Guest onboarding: invites an external user via /invitations instead of
- * creating a cloud account via POST /users. Entra creates the guest's
- * directory object immediately (assigning the actual #EXT# UPN) and emails
- * the invitation redemption link itself — there is no password or TAP for
- * this app to generate or hand over.
- */
 async function runInviteGuest(ctx: IStepContext, payload: IOnboardingPayload): Promise<void> {
   if (ctx.job.targetUserId) {
     const existing: ICreatedUser | null = await getOrNull(() =>
@@ -184,8 +137,6 @@ async function runInviteGuest(ctx: IStepContext, payload: IOnboardingPayload): P
     }
   }
 
-  // Idempotency: the invitation may have already created the guest's
-  // directory object even if the response was lost (e.g. tab closed).
   const email: string = payload.identity.userPrincipalName;
   const byMail: { value: ICreatedUser[] } = await ctx.graph.get<{ value: ICreatedUser[] }>(
     `/users?$select=id&$filter=${encodeURIComponent(`mail eq '${escapeODataLiteral(email)}'`)}`,
@@ -203,30 +154,21 @@ async function runInviteGuest(ctx: IStepContext, payload: IOnboardingPayload): P
     inviteRedirectUrl: 'https://myapplications.microsoft.com',
     sendInvitationMessage: true
   };
-  const result: { invitedUser: ICreatedUser } = await auditedGraphWrite(
-    ctx,
-    'invite-guest',
-    'POST',
-    '/invitations',
-    body,
-    () => ctx.graph.post<{ invitedUser: ICreatedUser }>('/invitations', body, { signal: ctx.signal })
+  const result: { invitedUser: ICreatedUser } = await auditedGraphWrite(ctx, 'invite-guest', 'POST', '/invitations', body, () =>
+    ctx.graph.post<{ invitedUser: ICreatedUser }>('/invitations', body, { signal: ctx.signal })
   );
   ctx.job.targetUserId = result.invitedUser.id;
   await ctx.data.setJobTargetUser(ctx.job.itemId, result.invitedUser.id);
 }
 
-// ---- set-usage-location ------------------------------------------------------
-
 async function runSetUsageLocation(ctx: IStepContext): Promise<void> {
   if (onboarding(ctx).identity.accountType === 'guest') {
-    return; // usage location gates license assignment, which doesn't apply to guests here
+    return;
   }
   const userId: string = await requireTargetUser(ctx);
   const desired: string = onboarding(ctx).accountSettings.usageLocation;
   const current: { usageLocation: string | null } | null = await getOrNull(() =>
-    ctx.graph.get<{ usageLocation: string | null }>(`/users/${userId}?$select=usageLocation`, {
-      signal: ctx.signal
-    })
+    ctx.graph.get<{ usageLocation: string | null }>(`/users/${userId}?$select=usageLocation`, { signal: ctx.signal })
   );
   if (current?.usageLocation === desired) {
     return;
@@ -237,12 +179,10 @@ async function runSetUsageLocation(ctx: IStepContext): Promise<void> {
   );
 }
 
-// ---- assign-manager ----------------------------------------------------------
-
 async function runAssignManager(ctx: IStepContext): Promise<void> {
   const managerId: string | undefined = onboarding(ctx).employment.managerId;
   if (!managerId) {
-    return; // no manager selected — legitimate no-op
+    return;
   }
   const userId: string = await requireTargetUser(ctx);
   const currentManager: { id: string } | null = await getOrNull(() =>
@@ -252,69 +192,89 @@ async function runAssignManager(ctx: IStepContext): Promise<void> {
     return;
   }
   const body = { '@odata.id': `https://graph.microsoft.com/v1.0/users/${managerId}` };
-  await auditedGraphWrite(
-    ctx,
-    'assign-manager',
-    'PUT',
-    `/users/${userId}/manager/$ref`,
-    body,
-    () => ctx.graph.put<void>(`/users/${userId}/manager/$ref`, body, { signal: ctx.signal })
+  await auditedGraphWrite(ctx, 'assign-manager', 'PUT', `/users/${userId}/manager/$ref`, body, () =>
+    ctx.graph.put<void>(`/users/${userId}/manager/$ref`, body, { signal: ctx.signal })
   );
 }
-
-// ---- assign-licenses ---------------------------------------------------------
 
 async function runAssignLicenses(ctx: IStepContext): Promise<void> {
   const payload = onboarding(ctx);
   if (payload.identity.accountType === 'guest') {
-    return; // guests in this flow are not licensed
+    return;
   }
   const selections = payload.licenses;
   if (selections.length === 0) {
     return;
   }
   const userId: string = await requireTargetUser(ctx);
-  const details: { value: { skuId: string }[] } = await ctx.graph.get<{
-    value: { skuId: string }[];
-  }>(`/users/${userId}/licenseDetails?$select=skuId`, { signal: ctx.signal });
+  const details: { value: { skuId: string }[] } = await ctx.graph.get<{ value: { skuId: string }[] }>(
+    `/users/${userId}/licenseDetails?$select=skuId`,
+    { signal: ctx.signal }
+  );
   const already: Set<string> = new Set((details.value ?? []).map((d) => d.skuId));
   const toAdd: string[] = selections.map((s) => s.skuId).filter((skuId) => !already.has(skuId));
   if (toAdd.length === 0) {
     return;
   }
-  const body = {
-    addLicenses: toAdd.map((skuId) => ({ skuId, disabledPlans: [] })),
-    removeLicenses: []
-  };
-  await auditedGraphWrite(
-    ctx,
-    'assign-licenses',
-    'POST',
-    `/users/${userId}/assignLicense`,
-    body,
-    () => ctx.graph.post<void>(`/users/${userId}/assignLicense`, body, { signal: ctx.signal })
+  const body = { addLicenses: toAdd.map((skuId) => ({ skuId, disabledPlans: [] })), removeLicenses: [] };
+  await auditedGraphWrite(ctx, 'assign-licenses', 'POST', `/users/${userId}/assignLicense`, body, () =>
+    ctx.graph.post<void>(`/users/${userId}/assignLicense`, body, { signal: ctx.signal })
   );
 }
 
-// ---- shared group-membership helpers (assign-groups + assign-applications) ----
-
-/** One batched checkMemberGroups call instead of one GET per candidate group. */
-async function alreadyMemberOf(
-  ctx: IStepContext,
-  userId: string,
-  groupIds: string[]
-): Promise<Set<string>> {
-  if (groupIds.length === 0) {
-    return new Set();
+function isMemberAlreadyExistsResponse(status: number, body: unknown): boolean {
+  if (status === 409) {
+    return true;
   }
-  const result: { value: string[] } | null = await getOrNull(() =>
-    ctx.graph.post<{ value: string[] }>(
-      `/users/${userId}/checkMemberGroups`,
-      { groupIds },
-      { signal: ctx.signal }
-    )
-  );
-  return new Set(result?.value ?? []);
+  if (status !== 400 || body === undefined || body === null) {
+    return false;
+  }
+  const text: string = (typeof body === 'string' ? body : JSON.stringify(body)).toLowerCase();
+  return text.indexOf('already exist') !== -1 || text.indexOf('already a member') !== -1;
+}
+
+async function batchAddGroupMembers(ctx: IStepContext, userId: string, groupIds: string[], action: string): Promise<string[]> {
+  const failed: string[] = [];
+  const body = { '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${userId}` };
+
+  for (let i = 0; i < groupIds.length; i += BATCH_SIZE) {
+    const chunk: string[] = groupIds.slice(i, i + BATCH_SIZE);
+    const requests: IBatchRequest[] = chunk.map((groupId) => ({ id: groupId, method: 'POST', url: `/groups/${groupId}/members/$ref`, body }));
+
+    try {
+      const responses = await ctx.graph.batch(requests, { signal: ctx.signal });
+      let anySucceeded: boolean = false;
+      for (const groupId of chunk) {
+        const response = responses.get(groupId);
+        const status = response?.status ?? 0;
+        if ((status >= 200 && status < 300) || isMemberAlreadyExistsResponse(status, response?.body)) {
+          anySucceeded = true;
+          continue;
+        }
+        failed.push(groupId);
+      }
+      if (anySucceeded) {
+        await ctx.audit.log({
+          jobId: ctx.job.jobId,
+          action,
+          targetUser: '',
+          graphEndpoint: '/$batch',
+          requestSummary: JSON.stringify({ groupCount: chunk.length }),
+          responseCode: 200,
+          durationMs: 0,
+          result: 'Success',
+          correlationId: ctx.job.correlationId
+        });
+      }
+    } catch (err) {
+      if (err instanceof RequestAbortedError) {
+        throw err;
+      }
+      failed.push(...chunk);
+    }
+  }
+
+  return failed;
 }
 
 async function addGroupMember(ctx: IStepContext, groupId: string, userId: string, action: string): Promise<void> {
@@ -324,8 +284,6 @@ async function addGroupMember(ctx: IStepContext, groupId: string, userId: string
   );
 }
 
-// ---- assign-groups -----------------------------------------------------------
-
 async function runAssignGroups(ctx: IStepContext): Promise<void> {
   const payload = onboarding(ctx);
   const groupIds: string[] = [...payload.access.securityGroups, ...payload.access.m365Groups];
@@ -333,23 +291,13 @@ async function runAssignGroups(ctx: IStepContext): Promise<void> {
     return;
   }
   const userId: string = await requireTargetUser(ctx);
-  const already: Set<string> = await alreadyMemberOf(ctx, userId, groupIds);
+  const already: Set<string> = await checkMemberGroups(ctx.graph, `/users/${userId}`, groupIds, ctx.signal);
 
-  const failed: string[] = [];
-  for (const groupId of groupIds) {
-    if (already.has(groupId)) {
-      continue;
-    }
-    try {
-      await addGroupMember(ctx, groupId, userId, 'assign-group');
-    } catch (err) {
-      if (err instanceof RequestAbortedError) {
-        throw err;
-      }
-      // Already audited as a failure by auditedGraphWrite; hand it to the desk.
-      failed.push(groupId);
-    }
+  const toAdd: string[] = groupIds.filter((id) => !already.has(id));
+  if (toAdd.length === 0) {
+    return;
   }
+  const failed: string[] = await batchAddGroupMembers(ctx, userId, toAdd, 'assign-group');
   if (failed.length > 0) {
     await ctx.data.createTask(
       ctx.job.jobId,
@@ -360,7 +308,42 @@ async function runAssignGroups(ctx: IStepContext): Promise<void> {
   }
 }
 
-// ---- assign-teams -----------------------------------------------------------
+async function batchAddTeamMembers(ctx: IStepContext, userId: string, assignments: { teamId: string; role: 'member' | 'owner' }[]): Promise<string[]> {
+  const failed: string[] = [];
+
+  for (let i = 0; i < assignments.length; i += BATCH_SIZE) {
+    const chunk = assignments.slice(i, i + BATCH_SIZE);
+    const requests: IBatchRequest[] = chunk.map((assignment) => ({
+      id: assignment.teamId,
+      method: 'POST',
+      url: `/teams/${assignment.teamId}/members`,
+      body: {
+        '@odata.type': '#microsoft.graph.aadUserConversationMember',
+        roles: assignment.role === 'owner' ? ['owner'] : [],
+        'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${userId}')`
+      }
+    }));
+
+    try {
+      const responses = await ctx.graph.batch(requests, { signal: ctx.signal });
+      for (const assignment of chunk) {
+        const response = responses.get(assignment.teamId);
+        const status = response?.status ?? 0;
+        if ((status >= 200 && status < 300) || isMemberAlreadyExistsResponse(status, response?.body)) {
+          continue;
+        }
+        failed.push(assignment.teamId);
+      }
+    } catch (err) {
+      if (err instanceof RequestAbortedError) {
+        throw err;
+      }
+      failed.push(...chunk.map((a) => a.teamId));
+    }
+  }
+
+  return failed;
+}
 
 async function runAssignTeams(ctx: IStepContext): Promise<void> {
   const payload = onboarding(ctx);
@@ -370,32 +353,14 @@ async function runAssignTeams(ctx: IStepContext): Promise<void> {
   }
   const userId: string = await requireTargetUser(ctx);
 
-  const failed: string[] = [];
-  for (const assignment of assignments) {
-    const existing: { value: { userId?: string }[] } | null = await getOrNull(() =>
-      ctx.graph.get<{ value: { userId?: string }[] }>(`/teams/${assignment.teamId}/members?$top=999`, {
-        signal: ctx.signal
-      })
-    );
-    if ((existing?.value ?? []).some((m) => m.userId === userId)) {
-      continue;
-    }
-    const body = {
-      '@odata.type': '#microsoft.graph.aadUserConversationMember',
-      roles: assignment.role === 'owner' ? ['owner'] : [],
-      'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${userId}')`
-    };
-    try {
-      await auditedGraphWrite(ctx, 'assign-team', 'POST', `/teams/${assignment.teamId}/members`, body, () =>
-        ctx.graph.post<void>(`/teams/${assignment.teamId}/members`, body, { signal: ctx.signal })
-      );
-    } catch (err) {
-      if (err instanceof RequestAbortedError) {
-        throw err;
-      }
-      failed.push(assignment.teamId);
-    }
+  const teamIds: string[] = assignments.map((a) => a.teamId);
+  const already: Set<string> = await checkMemberGroups(ctx.graph, `/users/${userId}`, teamIds, ctx.signal);
+
+  const toAdd = assignments.filter((a) => !already.has(a.teamId));
+  if (toAdd.length === 0) {
+    return;
   }
+  const failed: string[] = await batchAddTeamMembers(ctx, userId, toAdd);
   if (failed.length > 0) {
     await ctx.data.createTask(
       ctx.job.jobId,
@@ -405,8 +370,6 @@ async function runAssignTeams(ctx: IStepContext): Promise<void> {
     );
   }
 }
-
-// ---- assign-sharepoint --------------------------------------------------------
 
 async function runAssignSharePoint(ctx: IStepContext): Promise<void> {
   const payload = onboarding(ctx);
@@ -419,10 +382,6 @@ async function runAssignSharePoint(ctx: IStepContext): Promise<void> {
   const failed: string[] = [];
   for (const assignment of assignments) {
     const started: number = Date.now();
-    // Not a Graph call — SiteAccessService uses the operator's own SharePoint
-    // permissions on the target site via PnPJS (see its class doc comment).
-    // Logged directly rather than through auditedGraphWrite, which assumes a
-    // Graph endpoint/response code.
     try {
       await ctx.siteAccess.grantAccess(assignment.siteUrl, payload.identity.userPrincipalName, assignment.role);
       await ctx.audit.log({
@@ -461,8 +420,6 @@ async function runAssignSharePoint(ctx: IStepContext): Promise<void> {
   }
 }
 
-// ---- assign-applications ------------------------------------------------------
-
 async function runAssignApplications(ctx: IStepContext): Promise<void> {
   const payload = onboarding(ctx);
   const appItemIds = payload.access.applications;
@@ -472,44 +429,32 @@ async function runAssignApplications(ctx: IStepContext): Promise<void> {
   const userId: string = await requireTargetUser(ctx);
 
   const catalog: IApplicationCatalogItem[] = await ctx.data.getApplicationCatalog();
-  const byId: Map<string, IApplicationCatalogItem> = new Map(
-    catalog.map((a) => [String(a.itemId), a])
-  );
+  const byId: Map<string, IApplicationCatalogItem> = new Map(catalog.map((a) => [String(a.itemId), a]));
 
-  const groupBasedTargets: { app: IApplicationCatalogItem }[] = [];
+  const groupBasedTargets: IApplicationCatalogItem[] = [];
   const manualEntries: string[] = [];
   for (const appItemId of appItemIds) {
     const app = byId.get(appItemId);
     if (!app) {
-      continue; // catalog entry removed/deactivated since the wizard/template selected it
+      continue;
     }
     if (app.provisioningType === 'GroupBased' && app.targetGroupId) {
-      groupBasedTargets.push({ app });
+      groupBasedTargets.push(app);
     } else {
       manualEntries.push(app.title);
     }
   }
 
-  const groupIds: string[] = groupBasedTargets.map((t) => t.app.targetGroupId as string);
-  const already: Set<string> = await alreadyMemberOf(ctx, userId, groupIds);
+  const groupIds: string[] = groupBasedTargets.map((t) => t.targetGroupId as string);
+  const already: Set<string> = await checkMemberGroups(ctx.graph, `/users/${userId}`, groupIds, ctx.signal);
 
-  const failedGroupBased: string[] = [];
-  for (const { app } of groupBasedTargets) {
-    const groupId: string = app.targetGroupId as string;
-    if (already.has(groupId)) {
-      continue;
-    }
-    try {
-      await addGroupMember(ctx, groupId, userId, 'assign-application');
-    } catch (err) {
-      if (err instanceof RequestAbortedError) {
-        throw err;
-      }
-      failedGroupBased.push(app.title);
-    }
-  }
+  const toAdd: string[] = groupIds.filter((id) => !already.has(id));
+  const failedGroupBased: string[] = await batchAddGroupMembers(ctx, userId, toAdd, 'assign-application');
 
-  const needsAttention: string[] = [...manualEntries, ...failedGroupBased];
+  const needsAttention: string[] = [
+    ...manualEntries,
+    ...groupBasedTargets.filter((app) => failedGroupBased.indexOf(app.targetGroupId as string) !== -1).map((app) => app.title)
+  ];
   if (needsAttention.length > 0) {
     await ctx.data.createTask(
       ctx.job.jobId,
@@ -520,45 +465,33 @@ async function runAssignApplications(ctx: IStepContext): Promise<void> {
   }
 }
 
-// ---- present-credentials ---------------------------------------------------------
-// There is no wait-for-mailbox step: creating the user does not provision a
-// mailbox — that happens asynchronously once assign-licenses succeeds, on
-// Exchange's own timeline, with no API to poll for readiness against the
-// permission scopes this app holds. Nothing downstream (this step included)
-// depends on the mailbox existing, so there is nothing to gate on here.
-
 async function runPresentCredentials(ctx: IStepContext): Promise<void> {
   const payload: IOnboardingPayload = onboarding(ctx);
   if (payload.identity.accountType === 'guest') {
-    // Entra emails the invitation redemption link directly — there is no
-    // password or TAP for this app to generate or hand over for a guest.
     return;
   }
   const userId: string = await requireTargetUser(ctx);
   const upn: string = payload.identity.userPrincipalName;
 
   if (payload.accountSettings.credentialMode === 'tap') {
-    // A user can hold only one TAP: drop any stale one before creating ours
-    // (its value is unreadable after creation, so it cannot be re-shown).
     const existing: { value: { id: string }[] } | null = await getOrNull(() =>
-      ctx.graph.get<{ value: { id: string }[] }>(
-        `/users/${userId}/authentication/temporaryAccessPassMethods`,
-        { signal: ctx.signal }
-      )
+      ctx.graph.get<{ value: { id: string }[] }>(`/users/${userId}/authentication/temporaryAccessPassMethods`, { signal: ctx.signal })
     );
-    for (const method of existing?.value ?? []) {
-      await auditedGraphWrite(
-        ctx,
-        'delete-stale-tap',
-        'DELETE',
-        `/users/${userId}/authentication/temporaryAccessPassMethods/${method.id}`,
-        undefined,
-        () =>
-          ctx.graph.delete<void>(
-            `/users/${userId}/authentication/temporaryAccessPassMethods/${method.id}`,
-            { signal: ctx.signal }
-          )
-      );
+    const staleTapIds: string[] = (existing?.value ?? []).map((m) => m.id);
+    for (let i = 0; i < staleTapIds.length; i += BATCH_SIZE) {
+      const chunk: string[] = staleTapIds.slice(i, i + BATCH_SIZE);
+      const requests: IBatchRequest[] = chunk.map((id) => ({
+        id,
+        method: 'DELETE',
+        url: `/users/${userId}/authentication/temporaryAccessPassMethods/${id}`
+      }));
+      try {
+        await ctx.graph.batch(requests, { signal: ctx.signal });
+      } catch (err) {
+        if (err instanceof RequestAbortedError) {
+          throw err;
+        }
+      }
     }
     const tap: { temporaryAccessPass: string } = await auditedGraphWrite(
       ctx,
@@ -566,46 +499,23 @@ async function runPresentCredentials(ctx: IStepContext): Promise<void> {
       'POST',
       `/users/${userId}/authentication/temporaryAccessPassMethods`,
       {},
-      () =>
-        ctx.graph.post<{ temporaryAccessPass: string }>(
-          `/users/${userId}/authentication/temporaryAccessPassMethods`,
-          {},
-          { signal: ctx.signal }
-        )
+      () => ctx.graph.post<{ temporaryAccessPass: string }>(`/users/${userId}/authentication/temporaryAccessPassMethods`, {}, { signal: ctx.signal })
     );
     ctx.secrets.temporaryAccessPass = tap.temporaryAccessPass;
-    await ctx.presentCredentials({
-      kind: 'tap',
-      value: tap.temporaryAccessPass,
-      userPrincipalName: upn
-    });
+    await ctx.presentCredentials({ kind: 'tap', value: tap.temporaryAccessPass, userPrincipalName: upn });
     return;
   }
 
-  // Password mode. If the in-memory password from create-user is gone (the
-  // job resumed in a new session), reset it — the old value is unrecoverable
-  // by design (never persisted anywhere).
   if (!ctx.secrets.temporaryPassword) {
     const password: string = generateTempPassword();
-    const body = {
-      passwordProfile: {
-        password,
-        forceChangePasswordNextSignIn: payload.accountSettings.forceChangePassword
-      }
-    };
+    const body = { passwordProfile: { password, forceChangePasswordNextSignIn: payload.accountSettings.forceChangePassword } };
     await auditedGraphWrite(ctx, 'reset-temp-password', 'PATCH', `/users/${userId}`, body, () =>
       ctx.graph.patch<void>(`/users/${userId}`, body, { signal: ctx.signal })
     );
     ctx.secrets.temporaryPassword = password;
   }
-  await ctx.presentCredentials({
-    kind: 'password',
-    value: ctx.secrets.temporaryPassword,
-    userPrincipalName: upn
-  });
+  await ctx.presentCredentials({ kind: 'password', value: ctx.secrets.temporaryPassword, userPrincipalName: upn });
 }
-
-// ---- upload-photo --------------------------------------------------------------
 
 async function runUploadPhoto(ctx: IStepContext): Promise<void> {
   const payload = onboarding(ctx);
@@ -617,7 +527,7 @@ async function runUploadPhoto(ctx: IStepContext): Promise<void> {
 
   const match: RegExpExecArray | null = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
   if (!match) {
-    return; // malformed data URL — nothing sensible to upload, not worth failing the job over
+    return;
   }
   const [, contentType, base64] = match;
   const binary: string = atob(base64);
@@ -626,50 +536,32 @@ async function runUploadPhoto(ctx: IStepContext): Promise<void> {
     bytes[i] = binary.charCodeAt(i);
   }
 
-  await auditedGraphWrite(
-    ctx,
-    'upload-photo',
-    'PUT',
-    `/users/${userId}/photo/$value`,
-    { contentType, bytes: bytes.length }, // requestSummary only — never the binary itself
-    () =>
-      ctx.graph.put<void>(`/users/${userId}/photo/$value`, bytes.buffer, {
-        signal: ctx.signal,
-        headers: { 'Content-Type': contentType }
-      })
+  await auditedGraphWrite(ctx, 'upload-photo', 'PUT', `/users/${userId}/photo/$value`, { contentType, bytes: bytes.length }, () =>
+    ctx.graph.put<void>(`/users/${userId}/photo/$value`, bytes.buffer, { signal: ctx.signal, headers: { 'Content-Type': contentType } })
   );
 }
-
-// ---- send-notifications ---------------------------------------------------------
 
 async function runSendNotifications(ctx: IStepContext): Promise<void> {
   const payload = onboarding(ctx);
   const managerUpn: string | undefined = payload.employment.managerUpn;
   if (!managerUpn) {
-    return; // no manager selected — nobody to notify
+    return;
   }
   const body = {
     message: {
       subject: `Onboarding complete: ${payload.personal.displayName}`,
       body: {
         contentType: 'Text',
-        content:
-          `${payload.personal.displayName}'s account (${payload.identity.userPrincipalName}) ` +
-          'has been provisioned and is ready for first sign-in.'
+        content: `${payload.personal.displayName}'s account (${payload.identity.userPrincipalName}) has been provisioned and is ready for first sign-in.`
       },
       toRecipients: [{ emailAddress: { address: managerUpn } }]
     },
     saveToSentItems: true
   };
-  // Safe to repeat on resume — like revoke-sessions, sending mail isn't
-  // observable beforehand, so a rare duplicate notification on a resumed
-  // job is an acceptable trade-off against skipping it outright.
   await auditedGraphWrite(ctx, 'send-notification', 'POST', '/me/sendMail', body, () =>
     ctx.graph.post<void>('/me/sendMail', body, { signal: ctx.signal })
   );
 }
-
-// ---- schedule-access-review ------------------------------------------------------
 
 async function runScheduleAccessReview(ctx: IStepContext): Promise<void> {
   const payload = onboarding(ctx);
@@ -677,26 +569,14 @@ async function runScheduleAccessReview(ctx: IStepContext): Promise<void> {
   if (!days || days <= 0) {
     return;
   }
-  // No server exists to act on this unattended — the review is a task for a
-  // human, not an automatic future action (spec: expiration policy).
-  const dueDateLabel: string = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  const dueDateLabel: string = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   await ctx.data.createTask(
     ctx.job.jobId,
     'AccessReview',
     `Review access for ${payload.identity.userPrincipalName} by ${dueDateLabel}`,
-    `This account's access was granted under a ${days}-day review policy. Review whether ` +
-      `${payload.identity.userPrincipalName}'s licenses, groups and access are still needed, ` +
-      `and offboard or renew as appropriate. Due: ${dueDateLabel}.`
+    `This account's access was granted under a ${days}-day review policy. Review whether ${payload.identity.userPrincipalName}'s licenses, groups and access are still needed, and offboard or renew as appropriate. Due: ${dueDateLabel}.`
   );
 }
-
-// ---- clone-specific steps (validate-clone-source, copy-licenses, copy-groups) ----
-// Clone reuses this entire pipeline (see CLONE_STEP_ORDER in stepIds.ts) with
-// these three steps inserted after assign-licenses — the cloned user still
-// goes through create-user, its own template selections, credentials, etc.,
-// on top of what's copied from the source.
 
 function cloneSource(ctx: IStepContext): string | undefined {
   return onboarding(ctx).cloneSourceUserId;
@@ -707,9 +587,7 @@ async function runValidateCloneSource(ctx: IStepContext): Promise<void> {
   if (!sourceId) {
     throw new StepFailure('Clone job has no source user set', 'UPC_InvalidPayload', false);
   }
-  const source: { id: string } | null = await getOrNull(() =>
-    ctx.graph.get<{ id: string }>(`/users/${sourceId}?$select=id`, { signal: ctx.signal })
-  );
+  const source: { id: string } | null = await getOrNull(() => ctx.graph.get<{ id: string }>(`/users/${sourceId}?$select=id`, { signal: ctx.signal }));
   if (!source) {
     throw new StepFailure('The clone source user was not found in the directory', 'UPC_TargetNotFound', false);
   }
@@ -755,13 +633,9 @@ interface ISourceGroupPage {
   '@odata.nextLink'?: string;
 }
 
-/** Same exclusions as offboarding's group removal: dynamic/synced/DL-type
- *  memberships can't be edited through Graph in either direction. */
 async function fetchAssignableGroups(ctx: IStepContext, sourceUserId: string): Promise<string[]> {
   const groups: ISourceGroup[] = [];
-  let url: string | undefined =
-    `/users/${sourceUserId}/memberOf/microsoft.graph.group` +
-    '?$select=id,groupTypes,mailEnabled,onPremisesSyncEnabled&$top=999';
+  let url: string | undefined = `/users/${sourceUserId}/memberOf/microsoft.graph.group?$select=id,groupTypes,mailEnabled,onPremisesSyncEnabled&$top=999`;
   while (url) {
     const page: ISourceGroupPage = await ctx.graph.get<ISourceGroupPage>(url, { signal: ctx.signal });
     groups.push(...(page.value ?? []));
@@ -787,22 +661,10 @@ async function runCopyGroups(ctx: IStepContext): Promise<void> {
   if (groupIds.length === 0) {
     return;
   }
-  const already: Set<string> = await alreadyMemberOf(ctx, userId, groupIds);
+  const already: Set<string> = await checkMemberGroups(ctx.graph, `/users/${userId}`, groupIds, ctx.signal);
 
-  const failed: string[] = [];
-  for (const groupId of groupIds) {
-    if (already.has(groupId)) {
-      continue;
-    }
-    try {
-      await addGroupMember(ctx, groupId, userId, 'copy-group');
-    } catch (err) {
-      if (err instanceof RequestAbortedError) {
-        throw err;
-      }
-      failed.push(groupId);
-    }
-  }
+  const toAdd: string[] = groupIds.filter((id) => !already.has(id));
+  const failed: string[] = await batchAddGroupMembers(ctx, userId, toAdd, 'copy-group');
   if (failed.length > 0) {
     await ctx.data.createTask(
       ctx.job.jobId,
@@ -812,9 +674,6 @@ async function runCopyGroups(ctx: IStepContext): Promise<void> {
     );
   }
 }
-
-// ---- registry -------------------------------------------------------------------
-// runFinalizeAudit is shared with offboardingSteps.ts/transferSteps.ts — see stepHelpers.ts.
 
 export const ONBOARDING_STEPS: IWorkflowStepDefinition[] = [
   { id: STEP_VALIDATE_INPUT, skippable: false, maxAttempts: 3, continueOnFailure: false, run: runValidateInput },

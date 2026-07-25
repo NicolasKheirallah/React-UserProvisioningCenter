@@ -1,5 +1,6 @@
 import {
   LIST_APPLICATION_CATALOG,
+  LIST_APPROVAL_DELEGATIONS,
   LIST_AUDIT_LOG,
   LIST_DEPARTMENT_TEMPLATES,
   LIST_LICENSE_COST_TABLE,
@@ -22,43 +23,40 @@ export type UpcFieldType =
   | 'Choice';
 
 export interface IUpcFieldDefinition {
-  /** Internal/static name — must match what the data services select. */
   name: string;
   displayName: string;
   type: UpcFieldType;
   required?: boolean;
   choices?: string[];
+  indexed?: boolean;
 }
 
 export interface IUpcListDefinition {
   title: string;
   fields: IUpcFieldDefinition[];
-  /** UPC_AuditLog: restrict members to editing only their own items + versioning. */
   auditSecurity?: boolean;
+  indexedBuiltInFields?: string[];
 }
 
-/**
- * The nine UPC_* list schemas (spec Section 4). Single source for the
- * property-pane provisioning path; provisioning-assets/lists.ps1 is the
- * scripted equivalent — keep both in sync.
- */
 export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
   {
     title: LIST_DEPARTMENT_TEMPLATES,
     fields: [
       { name: 'TemplateJson', displayName: 'Template JSON', type: 'Note' },
-      { name: 'IsActive', displayName: 'Is Active', type: 'Boolean' },
+      { name: 'IsActive', displayName: 'Is Active', type: 'Boolean', indexed: true },
       { name: 'Version', displayName: 'Version', type: 'Number' }
     ]
   },
   {
     title: LIST_PROVISIONING_JOBS,
+    indexedBuiltInFields: ['Modified'],
     fields: [
       {
         name: 'JobType',
         displayName: 'Job Type',
         type: 'Choice',
         required: true,
+        indexed: true,
         choices: ['Onboard', 'Offboard', 'Transfer', 'Clone', 'Bulk']
       },
       {
@@ -66,6 +64,7 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
         displayName: 'Status',
         type: 'Choice',
         required: true,
+        indexed: true,
         choices: [
           'Draft',
           'PendingApproval',
@@ -84,14 +83,18 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
       { name: 'RequestedBy', displayName: 'Requested By', type: 'User' },
       { name: 'ApprovedBy', displayName: 'Approved By', type: 'User' },
       { name: 'CorrelationId', displayName: 'Correlation Id', type: 'Text' },
-      { name: 'TargetUserId', displayName: 'Target User Id', type: 'Text' }
+      { name: 'TargetUpn', displayName: 'Target UPN', type: 'Text', indexed: true },
+      { name: 'TargetUserId', displayName: 'Target User Id', type: 'Text' },
+      { name: 'RunningInstanceId', displayName: 'Running Instance Id', type: 'Text' },
+      { name: 'RunningSince', displayName: 'Running Since', type: 'DateTime' },
+      { name: 'ApprovalsJson', displayName: 'Approvals JSON', type: 'Note' }
     ]
   },
   {
     title: LIST_AUDIT_LOG,
     auditSecurity: true,
     fields: [
-      { name: 'JobId', displayName: 'Job Id', type: 'Text' },
+      { name: 'JobId', displayName: 'Job Id', type: 'Text', indexed: true },
       { name: 'Actor', displayName: 'Actor', type: 'Text' },
       { name: 'Action', displayName: 'Action', type: 'Text' },
       { name: 'TargetUser', displayName: 'Target User', type: 'Text' },
@@ -99,12 +102,7 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
       { name: 'RequestSummary', displayName: 'Request Summary', type: 'Note' },
       { name: 'ResponseCode', displayName: 'Response Code', type: 'Number' },
       { name: 'DurationMs', displayName: 'Duration (ms)', type: 'Number' },
-      {
-        name: 'Result',
-        displayName: 'Result',
-        type: 'Choice',
-        choices: ['Success', 'Failure', 'Skipped']
-      },
+      { name: 'Result', displayName: 'Result', type: 'Choice', choices: ['Success', 'Failure', 'Skipped'] },
       { name: 'CorrelationId', displayName: 'Correlation Id', type: 'Text' },
       { name: 'TimestampUtc', displayName: 'Timestamp (UTC)', type: 'DateTime' }
     ]
@@ -113,27 +111,17 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
     title: LIST_APPLICATION_CATALOG,
     fields: [
       { name: 'Owner', displayName: 'Owner', type: 'User' },
-      {
-        name: 'ProvisioningType',
-        displayName: 'Provisioning Type',
-        type: 'Choice',
-        choices: ['Manual', 'GroupBased']
-      },
+      { name: 'ProvisioningType', displayName: 'Provisioning Type', type: 'Choice', choices: ['Manual', 'GroupBased'] },
       { name: 'TargetGroupId', displayName: 'Target Group Id', type: 'Text' },
       { name: 'ApprovalRequired', displayName: 'Approval Required', type: 'Boolean' },
       { name: 'Instructions', displayName: 'Instructions', type: 'Note' },
-      { name: 'IsActive', displayName: 'Is Active', type: 'Boolean' }
+      { name: 'IsActive', displayName: 'Is Active', type: 'Boolean', indexed: true }
     ]
   },
   {
     title: LIST_ROLES,
     fields: [
-      {
-        name: 'MemberGroupId',
-        displayName: 'Member Group Id (Entra)',
-        type: 'Text',
-        required: true
-      },
+      { name: 'MemberGroupId', displayName: 'Member Group Id (Entra)', type: 'Text', required: true },
       { name: 'PermissionsJson', displayName: 'Permissions JSON', type: 'Note' }
     ]
   },
@@ -142,12 +130,7 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
     fields: [
       { name: 'TeamId', displayName: 'Team Id', type: 'Text', required: true },
       { name: 'Category', displayName: 'Category', type: 'Text' },
-      {
-        name: 'DefaultRole',
-        displayName: 'Default Role',
-        type: 'Choice',
-        choices: ['member', 'owner']
-      }
+      { name: 'DefaultRole', displayName: 'Default Role', type: 'Choice', choices: ['member', 'owner'] }
     ]
   },
   {
@@ -159,7 +142,6 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
     ]
   },
   {
-    // Title = skuPartNumber. Manually maintained — Graph exposes no pricing.
     title: LIST_LICENSE_COST_TABLE,
     fields: [
       { name: 'MonthlyCost', displayName: 'Monthly Cost', type: 'Currency' },
@@ -167,10 +149,10 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
     ]
   },
   {
-    // Landing place for everything Graph cannot do (spec Section 10).
     title: LIST_TASKS,
+    indexedBuiltInFields: ['Created'],
     fields: [
-      { name: 'JobId', displayName: 'Job Id', type: 'Text' },
+      { name: 'JobId', displayName: 'Job Id', type: 'Text', indexed: true },
       {
         name: 'TaskType',
         displayName: 'Task Type',
@@ -197,14 +179,25 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
       },
       { name: 'Instructions', displayName: 'Instructions', type: 'Note' },
       { name: 'AssignedTo', displayName: 'Assigned To', type: 'User' },
-      { name: 'Status', displayName: 'Status', type: 'Choice', choices: ['Open', 'Done'] },
+      { name: 'Status', displayName: 'Status', type: 'Choice', indexed: true, choices: ['Open', 'Done'] },
       { name: 'CompletedBy', displayName: 'Completed By', type: 'Text' },
       { name: 'CompletedUtc', displayName: 'Completed (UTC)', type: 'DateTime' }
     ]
   },
   {
-    // Tenant-shared app configuration; single row with Title = 'app'.
     title: LIST_SETTINGS,
+    indexedBuiltInFields: ['Title'],
     fields: [{ name: 'SettingsJson', displayName: 'Settings JSON', type: 'Note' }]
+  },
+  {
+    title: LIST_APPROVAL_DELEGATIONS,
+    indexedBuiltInFields: ['Title'],
+    fields: [
+      { name: 'DelegateUpn', displayName: 'Delegate UPN', type: 'Text', required: true, indexed: true },
+      { name: 'StartUtc', displayName: 'Start (UTC)', type: 'DateTime' },
+      { name: 'EndUtc', displayName: 'End (UTC)', type: 'DateTime' },
+      { name: 'Reason', displayName: 'Reason', type: 'Text' },
+      { name: 'IsActive', displayName: 'Is Active', type: 'Boolean', indexed: true }
+    ]
   }
 ];
