@@ -40,11 +40,50 @@ export default class ProvisioningCenterWebPart extends BaseClientSideWebPart<IPr
     try {
       this._services = await createServices(this.context);
       this._provisionStatus = strings.ProvisionStatusIdle;
+      this._exposeDiagnostics(this._services);
     } catch (err) {
       const message: string = err instanceof Error ? err.message : String(err);
       this._provisionStatus = `${strings.ProvisionStatusError} ${message}`.trim();
       console.error('[UPC] service composition failed', err);
     }
+  }
+
+  private _exposeDiagnostics(services: IServices): void {
+    const handle = {
+      events: () => services.telemetry.events.slice(),
+      dump: (): void => {
+        const rows = services.telemetry.events.map((e) => ({
+          time: e.timestamp,
+          level: e.level,
+          name: e.name,
+          ...(e.properties ?? {})
+        }));
+        if (rows.length === 0) {
+          console.log('[UPC] no telemetry recorded yet');
+          return;
+        }
+        console.table(rows);
+      },
+      probeJobs: async (): Promise<unknown> => {
+        const started: number = Date.now();
+        try {
+          const page = await services.data.getJobSummariesPaged();
+          return { ok: true, ms: Date.now() - started, count: page.items.length, truncated: page.truncated };
+        } catch (err) {
+          return {
+            ok: false,
+            ms: Date.now() - started,
+            name: err instanceof Error ? err.name : 'unknown',
+            message: err instanceof Error ? err.message : String(err),
+            status: typeof err === 'object' && err !== null && 'status' in err ? (err as { status: unknown }).status : undefined
+          };
+        }
+      },
+      schema: () => services.data.validateSchema(),
+      operatorUpn: services.operatorUpn
+    };
+    (window as unknown as Record<string, unknown>).__UPC = handle;
+    console.info('[UPC] diagnostics ready: __UPC.dump(), __UPC.probeJobs(), __UPC.schema()');
   }
 
   private _handleThemeChanged = (args: ThemeChangedEventArgs): void => {
