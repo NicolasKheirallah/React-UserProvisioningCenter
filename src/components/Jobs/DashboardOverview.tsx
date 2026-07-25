@@ -266,7 +266,6 @@ const WEEK_MS: number = 7 * 24 * 60 * 60 * 1000;
 const DAY_MS: number = 24 * 60 * 60 * 1000;
 
 const STATUS_COLORS: Record<JobStatus, string> = {
-  Draft: tokens.colorNeutralForeground3,
   PendingApproval: tokens.colorPaletteMarigoldForeground1,
   Approved: tokens.colorBrandForeground1,
   Scheduled: tokens.colorPaletteRoyalBlueForeground2,
@@ -389,7 +388,7 @@ const STATUS_ORDER: JobStatus[] = [
   'Failed',
   'Cancelled',
   'Scheduled',
-  'Draft'
+
 ];
 
 const ALL_JOB_TYPES: JobType[] = ['Onboard', 'Offboard', 'Transfer', 'Clone', 'Bulk'];

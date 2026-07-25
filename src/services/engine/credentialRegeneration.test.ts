@@ -78,7 +78,8 @@ class MockData {
     targetUpn: '',
     targetUserId: this._targetUserId,
     createdUtc: '2026-01-01T00:00:00Z',
-    modifiedUtc: '2026-01-01T00:00:00Z'
+    modifiedUtc: '2026-01-01T00:00:00Z',
+    runningSince: null
   });
 
   public addAuditEntry = async (entry: IAuditEntry): Promise<void> => {

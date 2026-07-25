@@ -66,7 +66,6 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
         required: true,
         indexed: true,
         choices: [
-          'Draft',
           'PendingApproval',
           'Approved',
           'Scheduled',

@@ -209,8 +209,6 @@ define([], function () {
     JobCompletedOf: 'Klart {0} av {1} steg',
     JobElapsedLabel: 'Förfluten tid',
     JobStepStarting: 'Startar…',
-
-    StatusDraft: 'Utkast',
     StatusPendingApproval: 'Väntar på godkännande',
     StatusApproved: 'Godkänt',
     StatusScheduled: 'Schemalagt',
@@ -483,6 +481,8 @@ define([], function () {
     SchemaGapTitle: 'UPC-listorna är inaktuella',
     SchemaGapIntro: 'Några listor eller kolumner som den här versionen behöver saknas. Öppna webbdelens egenskaper och kör Etablera listor för att reparera dem.',
     SchemaGapMissingList: 'listan hittades inte',
-    SchemaGapMissingColumns: 'saknade kolumner'
+    SchemaGapMissingColumns: 'saknade kolumner',
+    JobStalledLabel: 'Avstannat',
+    JobStalledTooltip: 'Det här jobbet har varit markerat som Kör längre än förväntat. Webbläsarsessionen som startade det kan ha stängts. Kör det igen för att ta över.'
   };
 });

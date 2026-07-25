@@ -74,6 +74,7 @@ interface IJobListItem {
   ApprovalsJson: string | null;
   Created: string;
   Modified: string;
+  RunningSince: string | null;
   RequestedBy?: { Title: string } | null;
   ApprovedBy?: { Title: string } | null;
 }
@@ -92,6 +93,7 @@ const JOB_SELECT: string[] = [
   'ApprovalsJson',
   'Created',
   'Modified',
+  'RunningSince',
   'RequestedBy/Title',
   'ApprovedBy/Title'
 ];
@@ -106,6 +108,7 @@ interface IJobSummaryListItem {
   ScheduledFor: string | null;
   Created: string;
   Modified: string;
+  RunningSince: string | null;
   RequestedBy?: { Title: string } | null;
   ApprovedBy?: { Title: string } | null;
 }
@@ -120,6 +123,7 @@ const JOB_SUMMARY_SELECT: string[] = [
   'ScheduledFor',
   'Created',
   'Modified',
+  'RunningSince',
   'RequestedBy/Title',
   'ApprovedBy/Title'
 ];
@@ -173,7 +177,8 @@ function parseJob(item: IJobListItem, telemetry?: TelemetryService): IProvisioni
     targetUpn: item.TargetUpn ?? '',
     targetUserId: item.TargetUserId,
     createdUtc: item.Created ?? null,
-    modifiedUtc: item.Modified ?? null
+    modifiedUtc: item.Modified ?? null,
+    runningSince: item.RunningSince ?? null
   };
 }
 
@@ -189,7 +194,8 @@ function parseJobSummary(item: IJobSummaryListItem): IJobSummary {
     approvedBy: item.ApprovedBy?.Title ?? null,
     correlationId: item.CorrelationId,
     createdUtc: item.Created ?? null,
-    modifiedUtc: item.Modified ?? null
+    modifiedUtc: item.Modified ?? null,
+    runningSince: item.RunningSince ?? null
   };
 }
 

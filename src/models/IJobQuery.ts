@@ -22,6 +22,24 @@ export interface IJobSummary {
   correlationId: string;
   createdUtc: string | null;
   modifiedUtc: string | null;
+  runningSince: string | null;
+}
+
+export const JOB_STALE_AFTER_MS: number = 10 * 60 * 1000;
+
+export function isJobStalled(
+  job: Pick<IJobSummary, 'status' | 'runningSince'>,
+  nowMs: number = Date.now(),
+  staleAfterMs: number = JOB_STALE_AFTER_MS
+): boolean {
+  if (job.status !== 'Running' || !job.runningSince) {
+    return false;
+  }
+  const since: number = new Date(job.runningSince).getTime();
+  if (isNaN(since)) {
+    return false;
+  }
+  return nowMs - since > staleAfterMs;
 }
 
 export function isEmptyJobQuery(query: IJobQuery | undefined): boolean {

@@ -1,7 +1,6 @@
 import type { JobStatus } from '../../models';
 
 const TRANSITIONS: Record<JobStatus, JobStatus[]> = {
-  Draft: ['PendingApproval', 'Cancelled'],
   PendingApproval: ['Approved', 'Cancelled'],
   Approved: ['Scheduled', 'Running', 'Cancelled'],
   Scheduled: ['Running', 'Cancelled'],

@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  Badge,
   Button,
   Dropdown,
   MessageBar,
@@ -22,6 +23,7 @@ import { useServices } from '../../contexts/ServicesContext';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { QK_JOB_SUMMARIES } from '../../constants/queryKeys';
 import type { IJobQuery, IJobSummary, JobStatus, JobType } from '../../models';
+import { isJobStalled } from '../../models';
 import { downloadCsv, toCsv } from '../../services/util/csv';
 import { DataState } from '../Shared/DataState';
 import { useAppToast } from '../Shared/AppToaster';
@@ -439,6 +441,11 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
                           <td className={styles.cell}>{jobTypeLabel(job.jobType)}</td>
                           <td className={styles.cell}>
                             <JobStatusBadge status={job.status} />
+                            {isJobStalled(job) ? (
+                              <Badge appearance="outline" color="warning" title={strings.JobStalledTooltip}>
+                                {strings.JobStalledLabel}
+                              </Badge>
+                            ) : undefined}
                           </td>
                           <td className={styles.cell}>{job.requestedBy ?? ''}</td>
                           <td className={styles.cell}>{createdLabel(job)}</td>

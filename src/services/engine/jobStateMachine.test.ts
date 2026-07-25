@@ -2,7 +2,6 @@ import { assertTransition, canStartJob, canTransition, isTerminal } from './jobS
 import type { JobStatus } from '../../models';
 
 const ALL: JobStatus[] = [
-  'Draft',
   'PendingApproval',
   'Approved',
   'Scheduled',
@@ -14,8 +13,7 @@ const ALL: JobStatus[] = [
 ];
 
 describe('jobStateMachine', () => {
-  it('follows the happy path Draft → ... → Completed', () => {
-    expect(canTransition('Draft', 'PendingApproval')).toBe(true);
+  it('follows the happy path PendingApproval → ... → Completed', () => {
     expect(canTransition('PendingApproval', 'Approved')).toBe(true);
     expect(canTransition('Approved', 'Running')).toBe(true);
     expect(canTransition('Approved', 'Scheduled')).toBe(true);
@@ -24,7 +22,6 @@ describe('jobStateMachine', () => {
   });
 
   it('refuses to run unapproved jobs (Phase 1 acceptance)', () => {
-    expect(canStartJob('Draft')).toBe(false);
     expect(canStartJob('PendingApproval')).toBe(false);
     expect(canStartJob('Cancelled')).toBe(false);
     expect(canStartJob('Completed')).toBe(false);
@@ -36,8 +33,6 @@ describe('jobStateMachine', () => {
   });
 
   it('never skips approval', () => {
-    expect(canTransition('Draft', 'Approved')).toBe(false);
-    expect(canTransition('Draft', 'Running')).toBe(false);
     expect(canTransition('PendingApproval', 'Running')).toBe(false);
     expect(canTransition('PendingApproval', 'Scheduled')).toBe(false);
   });
@@ -66,7 +61,7 @@ describe('jobStateMachine', () => {
   });
 
   it('assertTransition throws on illegal moves', () => {
-    expect(() => assertTransition('Draft', 'Running')).toThrow(/Invalid job transition/);
+    expect(() => assertTransition('PendingApproval', 'Running')).toThrow(/Invalid job transition/);
     expect(() => assertTransition('Approved', 'Running')).not.toThrow();
   });
 });

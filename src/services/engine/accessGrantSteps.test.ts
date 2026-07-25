@@ -96,7 +96,8 @@ class MockData {
     targetUpn: 'elin.berg@contoso.com',
     targetUserId: this.targetUserId,
     createdUtc: '2026-01-01T00:00:00Z',
-    modifiedUtc: '2026-01-01T00:00:00Z'
+    modifiedUtc: '2026-01-01T00:00:00Z',
+    runningSince: null
   });
 
   public updateJobStatus = async (_itemId: number, status: JobStatus): Promise<string> => {

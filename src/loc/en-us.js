@@ -209,8 +209,6 @@ define([], function () {
     JobCompletedOf: 'Completed {0} of {1} steps',
     JobElapsedLabel: 'Elapsed',
     JobStepStarting: 'Starting…',
-
-    StatusDraft: 'Draft',
     StatusPendingApproval: 'Pending approval',
     StatusApproved: 'Approved',
     StatusScheduled: 'Scheduled',
@@ -483,6 +481,8 @@ define([], function () {
     SchemaGapTitle: 'UPC lists are out of date',
     SchemaGapIntro: 'Some lists or columns this version needs are missing. Open the web part properties and run Provision lists to repair them.',
     SchemaGapMissingList: 'list not found',
-    SchemaGapMissingColumns: 'missing columns'
+    SchemaGapMissingColumns: 'missing columns',
+    JobStalledLabel: 'Stalled',
+    JobStalledTooltip: 'This job has been marked Running for longer than expected. The browser session that started it may have closed. Run it again to take over.'
   };
 });

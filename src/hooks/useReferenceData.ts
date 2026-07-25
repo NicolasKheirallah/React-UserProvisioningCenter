@@ -1,4 +1,5 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { usePageVisible } from './usePageVisible';
 import { useServices } from '../contexts/ServicesContext';
 import {
   QK_APP_ROLES,
@@ -126,33 +127,36 @@ export function useAllDelegations(): UseQueryResult<IApprovalDelegation[]> {
 
 export function useJobSummaries(query: IJobQuery, enablePolling: boolean): UseQueryResult<IPagedResult<IJobSummary>> {
   const services = useServices();
+  const visible = usePageVisible();
   return useQuery(
     [...QK_JOB_SUMMARIES, JSON.stringify(query)],
     () => services.data.getJobSummariesPaged(query),
     {
       staleTime: OPERATIONAL_STALE_MS,
-      refetchInterval: enablePolling ? CHANGE_TOKEN_POLL_MS : false
+      refetchInterval: enablePolling && visible ? CHANGE_TOKEN_POLL_MS : false
     }
   );
 }
 
 export function useJobsChangeToken(enabled: boolean): UseQueryResult<{ latestModifiedUtc: string; runningCount: number }> {
   const services = useServices();
+  const visible = usePageVisible();
   return useQuery(QK_JOB_CHANGE_TOKEN, () => services.data.getJobsChangeToken(), {
     enabled,
     staleTime: 0,
-    refetchInterval: enabled ? CHANGE_TOKEN_POLL_MS : false
+    refetchInterval: enabled && visible ? CHANGE_TOKEN_POLL_MS : false
   });
 }
 
 export function useJobDetail(itemId: number | null, pollWhileRunning: boolean): UseQueryResult<IProvisioningJob> {
   const services = useServices();
+  const visible = usePageVisible();
   return useQuery(
     [...QK_JOB_DETAIL, itemId ?? 0],
     () => services.data.getJob(itemId as number),
     {
       enabled: itemId !== null,
-      refetchInterval: pollWhileRunning ? CHANGE_TOKEN_POLL_MS : false
+      refetchInterval: pollWhileRunning && visible ? CHANGE_TOKEN_POLL_MS : false
     }
   );
 }

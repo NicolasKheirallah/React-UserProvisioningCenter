@@ -31,11 +31,6 @@ describe('WorkflowEngine', () => {
     expect(h.graph.calls).toHaveLength(0);
   });
 
-  it('refuses to start a Draft job', async () => {
-    const h: IHarness = makeHarness('Draft');
-    await expect(h.engine.runJob(1)).rejects.toThrow(/approval is required/);
-  });
-
   it('runs an approved onboarding job to completion and hands over credentials once', async () => {
     const h: IHarness = makeHarness('Approved');
     happyPathHandlers(h.graph);
@@ -240,7 +235,7 @@ describe('WorkflowEngine', () => {
   });
 
   it('createJob requires the createJobs permission', async () => {
-    const h: IHarness = makeHarness('Draft');
+    const h: IHarness = makeHarness('PendingApproval');
     h.auth.denied.add('createJobs');
     await expect(
       h.engine.createJob({ jobType: 'Onboard', payload: {} as never, steps: [], scheduledFor: null })

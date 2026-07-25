@@ -201,8 +201,6 @@ declare interface IUpcStrings {
   JobCompletedOf: string;
   JobElapsedLabel: string;
   JobStepStarting: string;
-
-  StatusDraft: string;
   StatusPendingApproval: string;
   StatusApproved: string;
   StatusScheduled: string;
@@ -464,6 +462,8 @@ declare interface IUpcStrings {
   SchemaGapIntro: string;
   SchemaGapMissingList: string;
   SchemaGapMissingColumns: string;
+  JobStalledLabel: string;
+  JobStalledTooltip: string;
 }
 
 declare module 'UpcStrings' {

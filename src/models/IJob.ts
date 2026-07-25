@@ -20,7 +20,6 @@ export function isTransferPayload(payload: IJobPayload): payload is ITransferPay
 }
 
 export type JobStatus =
-  | 'Draft'
   | 'PendingApproval'
   | 'Approved'
   | 'Scheduled'
@@ -65,4 +64,5 @@ export interface IProvisioningJob {
   targetUserId: string | null;
   createdUtc: string | null;
   modifiedUtc: string | null;
+  runningSince: string | null;
 }

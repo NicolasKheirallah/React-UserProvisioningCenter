@@ -6,7 +6,6 @@ import type { JobStatus, JobType, StepStatus } from '../../models';
 type BadgeColor = 'brand' | 'danger' | 'important' | 'informative' | 'severe' | 'subtle' | 'success' | 'warning';
 
 const JOB_STATUS_META: Record<JobStatus, { color: BadgeColor; label: () => string }> = {
-  Draft: { color: 'subtle', label: () => strings.StatusDraft },
   PendingApproval: { color: 'warning', label: () => strings.StatusPendingApproval },
   Approved: { color: 'brand', label: () => strings.StatusApproved },
   Scheduled: { color: 'informative', label: () => strings.StatusScheduled },
@@ -25,12 +24,17 @@ const STEP_STATUS_META: Record<StepStatus, { color: BadgeColor; label: () => str
   skipped: { color: 'informative', label: () => strings.StepStatusSkipped }
 };
 
+const UNKNOWN_JOB_STATUS_META: { color: BadgeColor; label: () => string } = {
+  color: 'subtle',
+  label: () => ''
+};
+
 export function jobStatusLabel(status: JobStatus): string {
-  return (JOB_STATUS_META[status] ?? JOB_STATUS_META.Draft).label();
+  return (JOB_STATUS_META[status] ?? UNKNOWN_JOB_STATUS_META).label();
 }
 
 export const JobStatusBadge: React.FC<{ status: JobStatus }> = ({ status }) => {
-  const meta = JOB_STATUS_META[status] ?? JOB_STATUS_META.Draft;
+  const meta = JOB_STATUS_META[status] ?? UNKNOWN_JOB_STATUS_META;
   return (
     <Badge appearance="tint" color={meta.color}>
       {meta.label()}
