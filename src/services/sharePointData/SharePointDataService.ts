@@ -129,19 +129,31 @@ function parseJob(item: IJobListItem, telemetry?: TelemetryService): IProvisioni
     payload = JSON.parse(item.PayloadJson) as IJobPayload;
   } catch {
     payload = {} as IJobPayload;
-    telemetry?.trackEvent('data.parseFailure', { list: 'UPC_Jobs', field: 'PayloadJson', itemId: item.Id }, 'warning');
+    telemetry?.trackEvent(
+      'data.parseFailure',
+      { list: LIST_PROVISIONING_JOBS, field: 'PayloadJson', itemId: item.Id },
+      'warning'
+    );
   }
   try {
     steps = item.StepsJson ? (JSON.parse(item.StepsJson) as IJobStep[]) : [];
   } catch {
     steps = [];
-    telemetry?.trackEvent('data.parseFailure', { list: 'UPC_Jobs', field: 'StepsJson', itemId: item.Id }, 'warning');
+    telemetry?.trackEvent(
+      'data.parseFailure',
+      { list: LIST_PROVISIONING_JOBS, field: 'StepsJson', itemId: item.Id },
+      'warning'
+    );
   }
   try {
     approvals = item.ApprovalsJson ? (JSON.parse(item.ApprovalsJson) as IApprovalRecord[]) : [];
   } catch {
     approvals = [];
-    telemetry?.trackEvent('data.parseFailure', { list: 'UPC_Jobs', field: 'ApprovalsJson', itemId: item.Id }, 'warning');
+    telemetry?.trackEvent(
+      'data.parseFailure',
+      { list: LIST_PROVISIONING_JOBS, field: 'ApprovalsJson', itemId: item.Id },
+      'warning'
+    );
   }
   return {
     itemId: item.Id,
