@@ -33,6 +33,7 @@ import {
   type TooltipContentProps
 } from 'recharts';
 import * as strings from 'UpcStrings';
+import { useReducedMotion } from '../../hooks/useMediaQuery';
 import type { IJobSummary, JobStatus, JobType } from '../../models';
 import { jobStatusLabel, jobTypeLabel } from '../Shared/StatusBadge';
 
@@ -64,6 +65,10 @@ const useStyles = makeStyles({
     ':hover': {
       transform: 'translateY(-2px)',
       boxShadow: tokens.shadow4
+    },
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionDuration: '0.01ms',
+      ':hover': { transform: 'none' }
     }
   },
   kpiCardActive: {
@@ -219,8 +224,48 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     height: '260px',
     color: tokens.colorNeutralForeground3
+  },
+  visuallyHidden: {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    padding: 0,
+    margin: '-1px',
+    overflow: 'hidden',
+    clip: 'rect(0, 0, 0, 0)',
+    whiteSpace: 'nowrap',
+    border: 0
   }
 });
+
+interface IChartTableProps {
+  caption: string;
+  columns: [string, string];
+  rows: [string, number][];
+}
+
+const ChartDataTable: React.FC<IChartTableProps> = ({ caption, columns, rows }) => {
+  const styles = useStyles();
+  return (
+    <table className={styles.visuallyHidden}>
+      <caption>{caption}</caption>
+      <thead>
+        <tr>
+          <th scope="col">{columns[0]}</th>
+          <th scope="col">{columns[1]}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(([label, value]) => (
+          <tr key={label}>
+            <th scope="row">{label}</th>
+            <td>{value}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+};
 
 const WEEK_MS: number = 7 * 24 * 60 * 60 * 1000;
 const DAY_MS: number = 24 * 60 * 60 * 1000;
@@ -534,6 +579,8 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
   React.useEffect(() => {
     hasRenderedOnce.current = true;
   }, []);
+  const reducedMotion: boolean = useReducedMotion();
+  const chartsAnimate: boolean = !hasRenderedOnce.current && !reducedMotion;
 
   const kpiCards: {
     key: KpiFilterKey;
@@ -628,7 +675,7 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
                     paddingAngle={2}
                     stroke={tokens.colorNeutralBackground1}
                     strokeWidth={2}
-                    isAnimationActive={!hasRenderedOnce.current}
+                    isAnimationActive={chartsAnimate}
                     animationDuration={motionTokens.durationSlow}
                     animationEasing="ease-out"
                   >
@@ -649,6 +696,11 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
                 <span className={styles.donutCenterValue}>{summary.total}</span>
                 <span className={styles.donutCenterLabel}>{strings.DashboardTotalJobs}</span>
               </div>
+              <ChartDataTable
+                caption={strings.DashboardJobsByStatus}
+                columns={[strings.JobColumnStatus, strings.DashboardTotalJobs]}
+                rows={summary.statusData.map((d) => [d.name, d.value])}
+              />
             </div>
           ) : (
             <div className={styles.emptyChart}>{strings.DashboardNoActivity}</div>
@@ -685,7 +737,7 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
                     dataKey="value"
                     name={strings.DashboardJobsByType}
                     radius={[0, 6, 6, 0]}
-                    isAnimationActive={!hasRenderedOnce.current}
+                    isAnimationActive={chartsAnimate}
                     animationDuration={motionTokens.durationSlow}
                   >
                     {summary.typeData.map((entry) => (
@@ -694,6 +746,11 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              <ChartDataTable
+                caption={strings.DashboardJobsByType}
+                columns={[strings.JobColumnType, strings.DashboardTotalJobs]}
+                rows={summary.typeData.map((d) => [d.name, d.value])}
+              />
             </div>
           ) : (
             <div className={styles.emptyChart}>{strings.DashboardNoActivity}</div>
@@ -762,7 +819,7 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
                   strokeWidth={2}
                   fill="url(#gradCompleted)"
                   activeDot={{ r: 4, strokeWidth: 2, stroke: tokens.colorNeutralBackground1 }}
-                  isAnimationActive={!hasRenderedOnce.current}
+                  isAnimationActive={chartsAnimate}
                   animationDuration={motionTokens.durationSlow}
                 />
                 <Area
@@ -773,7 +830,7 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
                   strokeWidth={2}
                   fill="url(#gradRunning)"
                   activeDot={{ r: 4, strokeWidth: 2, stroke: tokens.colorNeutralBackground1 }}
-                  isAnimationActive={!hasRenderedOnce.current}
+                  isAnimationActive={chartsAnimate}
                   animationDuration={motionTokens.durationSlow}
                 />
                 <Area
@@ -784,7 +841,7 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
                   strokeWidth={2}
                   fill="url(#gradPending)"
                   activeDot={{ r: 4, strokeWidth: 2, stroke: tokens.colorNeutralBackground1 }}
-                  isAnimationActive={!hasRenderedOnce.current}
+                  isAnimationActive={chartsAnimate}
                   animationDuration={motionTokens.durationSlow}
                 />
                 <Area
@@ -795,11 +852,16 @@ export const DashboardOverview: React.FC<IDashboardOverviewProps> = ({ jobs, act
                   strokeWidth={2}
                   fill="url(#gradFailed)"
                   activeDot={{ r: 4, strokeWidth: 2, stroke: tokens.colorNeutralBackground1 }}
-                  isAnimationActive={!hasRenderedOnce.current}
+                  isAnimationActive={chartsAnimate}
                   animationDuration={motionTokens.durationSlow}
                 />
               </AreaChart>
             </ResponsiveContainer>
+            <ChartDataTable
+              caption={strings.DashboardTrend7Days}
+              columns={[strings.DashboardDays, strings.DashboardTotalJobs]}
+              rows={summary.trendData.map((d) => [d.day, d.total])}
+            />
           </div>
         ) : (
           <div className={styles.emptyChart}>{strings.DashboardNoActivity}</div>

@@ -32,6 +32,7 @@ import * as strings from 'UpcStrings';
 import { useServices } from '../../contexts/ServicesContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useAppRoles, useJobDetail } from '../../hooks/useReferenceData';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { QK_AUDIT, QK_JOB_SUMMARIES } from '../../constants/queryKeys';
 import { canStartJob, isTerminal } from '../../services/engine/jobStateMachine';
 import { targetUserOf } from '../../services/engine/stepHelpers';
@@ -46,20 +47,6 @@ import { formatString } from '../Shared/format';
 import { JobStatusBadge, jobStatusLabel, jobTypeLabel, stepDisplayName } from '../Shared/StatusBadge';
 
 const NARROW_QUERY = '(max-width: 640px)';
-
-function useIsNarrow(): boolean {
-  const [narrow, setNarrow] = React.useState<boolean>(
-    () => typeof window !== 'undefined' && window.matchMedia(NARROW_QUERY).matches
-  );
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mql = window.matchMedia(NARROW_QUERY);
-    const onChange = (): void => setNarrow(mql.matches);
-    mql.addEventListener('change', onChange);
-    return () => mql.removeEventListener('change', onChange);
-  }, []);
-  return narrow;
-}
 
 const useStyles = makeStyles({
   body: {
@@ -417,7 +404,7 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
   const { requiredApprovals } = useSettings();
   const queryClient = useQueryClient();
   const toast = useAppToast();
-  const isNarrow = useIsNarrow();
+  const isNarrow = useMediaQuery(NARROW_QUERY);
 
   const [running, setRunning] = React.useState<boolean>(false);
   const detail = useJobDetail(itemId, !running);
