@@ -17,6 +17,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as strings from 'UpcStrings';
 import type { IServices } from '../services/createServices';
+import { shouldRetryQuery } from '../services/util/queryRetry';
 import { ServicesProvider, useServices } from '../contexts/ServicesContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
 import { WizardProvider, isDraftDirty, useWizard } from '../contexts/WizardContext';
@@ -236,7 +237,7 @@ export const App: React.FC<IAppProps> = ({ services, theme, dir, instanceId }) =
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { retry: 1, refetchOnWindowFocus: false }
+          queries: { retry: shouldRetryQuery, refetchOnWindowFocus: false }
         }
       })
   );

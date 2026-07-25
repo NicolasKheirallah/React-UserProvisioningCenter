@@ -2,7 +2,8 @@ jest.mock('./delay', () => ({
   delay: async (_ms: number, _signal?: AbortSignal): Promise<void> => undefined
 }));
 
-import { sharePointRetry, isRetryableSharePointError, getRetryAfterMs } from './sharePointRetry';
+import { sharePointRetry, isRetryableSharePointError, getRetryAfterMs, sharePointCircuit } from './sharePointRetry';
+import { TimeoutError } from './withTimeout';
 import { mapLimit } from './boundedConcurrency';
 import { fetchPaged } from './pagedQuery';
 import { ConcurrencyError } from './ConcurrencyError';
@@ -197,5 +198,65 @@ describe('ConcurrencyError', () => {
     const err = new ConcurrencyError('job is locked');
     expect(err.message).toBe('job is locked');
     expect(err.name).toBe('ConcurrencyError');
+  });
+});
+
+describe('sharePointRetry timeout', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+    sharePointCircuit.reset();
+  });
+
+  it('rejects with TimeoutError when the request never settles', async () => {
+    jest.useFakeTimers();
+    const never = (): Promise<string> => new Promise<string>(() => undefined);
+
+    const promise = sharePointRetry(never, { timeoutMs: 1000, circuitKey: 'never-settles' });
+    const assertion = expect(promise).rejects.toBeInstanceOf(TimeoutError);
+
+    await jest.advanceTimersByTimeAsync(1500);
+    await assertion;
+  });
+
+  it('does not retry a timeout, so a hung request fails fast instead of multiplying', async () => {
+    jest.useFakeTimers();
+    let starts = 0;
+    const never = (): Promise<string> => {
+      starts++;
+      return new Promise<string>(() => undefined);
+    };
+
+    const promise = sharePointRetry(never, {
+      timeoutMs: 1000,
+      maxAttempts: 4,
+      circuitKey: 'never-settles-once'
+    });
+    const assertion = expect(promise).rejects.toBeInstanceOf(TimeoutError);
+
+    await jest.advanceTimersByTimeAsync(5000);
+    await assertion;
+    expect(starts).toBe(1);
+  });
+
+  it('resolves normally when the request completes before the timeout', async () => {
+    jest.useFakeTimers();
+    const quick = (): Promise<string> =>
+      new Promise<string>((resolve) => setTimeout(() => resolve('done'), 100));
+
+    const promise = sharePointRetry(quick, { timeoutMs: 5000, circuitKey: 'quick' });
+    await jest.advanceTimersByTimeAsync(200);
+
+    await expect(promise).resolves.toBe('done');
+  });
+
+  it('carries the circuit key in the timeout message so the stuck list is identifiable', async () => {
+    jest.useFakeTimers();
+    const never = (): Promise<string> => new Promise<string>(() => undefined);
+
+    const promise = sharePointRetry(never, { timeoutMs: 1000, circuitKey: 'UPC_ProvisioningJobs' });
+    const assertion = expect(promise).rejects.toThrow(/UPC_ProvisioningJobs/);
+
+    await jest.advanceTimersByTimeAsync(1500);
+    await assertion;
   });
 });
