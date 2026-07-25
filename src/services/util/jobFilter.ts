@@ -1,5 +1,6 @@
 import { escapeODataLiteral } from './odata';
-import type { IJobQuery } from '../../models';
+import type { IJobQuery, JobStatus, JobType } from '../../models';
+
 export function buildJobFilter(query: IJobQuery | undefined): string {
   if (!query) {
     return '';
@@ -8,20 +9,18 @@ export function buildJobFilter(query: IJobQuery | undefined): string {
   const search: string = (query.search ?? '').trim();
   if (search) {
     const literal: string = escapeODataLiteral(search);
-    clauses.push(
-      `(startswith(TargetUpn,'${literal}') or startswith(Title,'${literal}'))`
-    );
+    clauses.push(`(startswith(TargetUpn,'${literal}') or startswith(Title,'${literal}'))`);
   }
-  const statuses: string[] = (query.status ?? []).filter((s) => !!s);
+  const statuses: JobStatus[] = (query.status ?? []).filter((s: JobStatus): boolean => !!s);
   if (statuses.length > 0) {
     clauses.push(
-      `(${statuses.map((s) => `Status eq '${escapeODataLiteral(s)}'`).join(' or ')})`
+      `(${statuses.map((s: JobStatus) => `Status eq '${escapeODataLiteral(s)}'`).join(' or ')})`
     );
   }
-  const types: string[] = (query.jobType ?? []).filter((t) => !!t);
+  const types: JobType[] = (query.jobType ?? []).filter((t: JobType): boolean => !!t);
   if (types.length > 0) {
     clauses.push(
-      `(${types.map((t) => `JobType eq '${escapeODataLiteral(t)}'`).join(' or ')})`
+      `(${types.map((t: JobType) => `JobType eq '${escapeODataLiteral(t)}'`).join(' or ')})`
     );
   }
   if (query.createdFromUtc) {
@@ -41,6 +40,7 @@ export function buildJobFilter(query: IJobQuery | undefined): string {
   }
   return clauses.join(' and ');
 }
+
 function toODataDate(value: string, endOfDay: boolean = false): string | undefined {
   const isDateOnly: boolean = /^\d{4}-\d{2}-\d{2}$/.test(value);
   const iso: string = isDateOnly

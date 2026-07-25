@@ -1,18 +1,20 @@
 import type { MSGraphClientV3 } from '@microsoft/sp-http';
 import { GraphServiceError, RequestAbortedError, RETRYABLE_STATUS_CODES, toGraphServiceError } from './GraphError';
 import { delay } from '../util/delay';
+import { CircuitBreaker, CircuitOpenError } from '../util/circuitBreaker';
 import type { TelemetryService } from '../telemetry/TelemetryService';
 
 export type GraphVersion = 'v1.0' | 'beta';
+export type GraphRetryPolicy = 'safe' | 'mutation';
 
 export interface IGraphRequestOptions {
   version?: GraphVersion;
   headers?: Record<string, string>;
   signal?: AbortSignal;
-  /** Overrides the default retry budget (attempts including the first). */
   maxAttempts?: number;
-  /** Per-request timeout in ms; aborts the underlying call if exceeded. */
   timeoutMs?: number;
+  retryPolicy?: GraphRetryPolicy;
+  circuitKey?: string;
 }
 
 export interface IBatchRequest {
@@ -30,17 +32,6 @@ export interface IBatchResponse<T = unknown> {
   headers?: Record<string, string>;
 }
 
-/**
- * Typed batch helper. Pass a request map whose values describe the expected
- * response body type; the returned map preserves those types per id.
- *
- * @example
- * const res = await graph.batchTyped({
- *   org: { method: 'GET', url: '/organization?$select=id' },
- *   me:  { method: 'GET', url: '/me?$select=id' }
- * });
- * const orgBody = res.org.body; // { id: string }
- */
 export async function batchTyped<TMap extends Record<string, { method: IBatchRequest['method']; url: string; body?: unknown; headers?: Record<string, string> }>>(
   graph: GraphService,
   requests: TMap,
@@ -65,15 +56,30 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
-/**
- * Thin resilience wrapper over MSGraphClientV3 (delegated permissions only):
- * exponential backoff on 429/5xx honoring Retry-After when surfaced,
- * cooperative AbortSignal cancellation, $batch support, normalized errors.
- * Never uses raw fetch (spec Section 2).
- */
+function defaultCircuitKey(path: string): string {
+  const cleaned: string = path.replace(/^\//, '');
+  const segment: string = cleaned.split(/[/?]/)[0] ?? 'graph';
+  return `graph:${segment || 'root'}`;
+}
+
+export function isRetryableUnderPolicy(error: GraphServiceError, policy: GraphRetryPolicy): boolean {
+  if (policy === 'safe') {
+    return error.retryable;
+  }
+  if (error.statusCode === 429) {
+    return true;
+  }
+  return error.statusCode === 503 && error.retryAfterSeconds !== undefined;
+}
+
 export class GraphService {
   private readonly _client: MSGraphClientV3;
   private _telemetry: TelemetryService | undefined;
+  public readonly circuit: CircuitBreaker = new CircuitBreaker({
+    failureThreshold: 6,
+    openMs: 30_000,
+    maxOpenMs: 5 * 60_000
+  });
 
   public constructor(client: MSGraphClientV3) {
     this._client = client;
@@ -103,16 +109,11 @@ export class GraphService {
     return this._execute<T>('DELETE', path, undefined, options);
   }
 
-  /** Executes independent reads in one round trip via Graph $batch. */
   public async batch(
     requests: IBatchRequest[],
     options?: IGraphRequestOptions
   ): Promise<Map<string, IBatchResponse>> {
     const map: Map<string, IBatchResponse> = new Map();
-    // $batch returns HTTP 200 for the envelope even when an individual
-    // sub-request came back 429/503 — that's invisible to _execute's own
-    // retry loop, which only sees the outer status. Retry just the throttled
-    // sub-requests (not the whole batch) for a few rounds before giving up.
     let pending: IBatchRequest[] = requests;
     const maxRounds: number = 3;
     for (let round = 1; round <= maxRounds && pending.length > 0; round++) {
@@ -164,13 +165,22 @@ export class GraphService {
     options?: IGraphRequestOptions
   ): Promise<T> {
     const maxAttempts: number = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+    const policy: GraphRetryPolicy = options?.retryPolicy ?? (method === 'GET' ? 'safe' : 'mutation');
+    const circuitKey: string = options?.circuitKey ?? defaultCircuitKey(path);
     let lastError: GraphServiceError | undefined;
     const started: number = Date.now();
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       throwIfAborted(options?.signal);
       try {
-        const result: T = await this._send<T>(method, path, body, options);
+        const result: T = await this.circuit.execute(
+          circuitKey,
+          () => this._send<T>(method, path, body, options),
+          (err) => {
+            const asGraph: GraphServiceError = toGraphServiceError(err);
+            return asGraph.statusCode === 429 || asGraph.statusCode >= 500 || asGraph.statusCode === 0;
+          }
+        );
         if (this._telemetry) {
           this._telemetry.trackGraphCall(method, path, 200, Date.now() - started, attempt > 1);
         }
@@ -179,18 +189,22 @@ export class GraphService {
         if (err instanceof RequestAbortedError) {
           throw err;
         }
+        if (err instanceof CircuitOpenError) {
+          if (this._telemetry) {
+            this._telemetry.trackEvent(
+              'graph.circuitOpen',
+              { method, path, circuitKey, retryAfterMs: err.retryAfterMs },
+              'warning'
+            );
+          }
+          throw new GraphServiceError(err.message, 429, 'UPC_CircuitOpen', '', Math.ceil(err.retryAfterMs / 1000));
+        }
         const graphError: GraphServiceError = toGraphServiceError(err);
         lastError = graphError;
         if (this._telemetry) {
-          this._telemetry.trackGraphCall(
-            method,
-            path,
-            graphError.statusCode,
-            Date.now() - started,
-            attempt > 1
-          );
+          this._telemetry.trackGraphCall(method, path, graphError.statusCode, Date.now() - started, attempt > 1);
         }
-        if (!graphError.retryable || attempt === maxAttempts) {
+        if (!isRetryableUnderPolicy(graphError, policy) || attempt === maxAttempts) {
           throw graphError;
         }
         const waitMs: number =
@@ -200,7 +214,6 @@ export class GraphService {
         await delay(waitMs, options?.signal);
       }
     }
-    // Unreachable, but satisfies control-flow analysis.
     throw lastError ?? new GraphServiceError('Unknown Graph error', 0, 'UnknownError', '');
   }
 
@@ -210,10 +223,14 @@ export class GraphService {
     body: unknown,
     options?: IGraphRequestOptions
   ): Promise<T> {
-    // Per-request timeout: race the Graph call against a timeout promise.
-    // The MSGraphClientV3 fluent API doesn't accept an AbortSignal, so we
-    // race the in-flight promise and throw a GraphServiceError on timeout.
-    const timeoutMs: number | undefined = options?.timeoutMs;
+    let timeoutMs: number | undefined = options?.timeoutMs;
+    if (timeoutMs !== undefined && method !== 'GET') {
+      if (this._telemetry) {
+        this._telemetry.trackEvent('graph.timeoutIgnored', { method, path }, 'warning');
+      }
+      timeoutMs = undefined;
+    }
+
     let request = this._client.api(path).version(options?.version ?? 'v1.0');
     if (options?.headers) {
       request = request.headers(options.headers);
@@ -243,15 +260,7 @@ export class GraphService {
     let timeoutTimer: number | undefined;
     const timeoutPromise: Promise<never> = new Promise<never>((_resolve, reject) => {
       timeoutTimer = window.setTimeout(
-        () =>
-          reject(
-            new GraphServiceError(
-              `Request to ${path} timed out after ${timeoutMs}ms`,
-              408,
-              'RequestTimeout',
-              ''
-            )
-          ),
+        () => reject(new GraphServiceError(`Request to ${path} timed out after ${timeoutMs}ms`, 408, 'RequestTimeout', '')),
         timeoutMs
       );
     });
@@ -262,6 +271,7 @@ export class GraphService {
       if (timeoutTimer !== undefined) {
         window.clearTimeout(timeoutTimer);
       }
+      sendPromise.catch(() => undefined);
     }
   }
 }

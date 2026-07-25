@@ -1,4 +1,6 @@
+export * from './IApproval';
 export * from './IJob';
+export * from './IJobQuery';
 export * from './IOnboardingPayload';
 export * from './IOffboardingPayload';
 export * from './ITransferPayload';

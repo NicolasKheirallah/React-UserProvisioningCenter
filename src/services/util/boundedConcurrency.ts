@@ -1,10 +1,3 @@
-/**
- * Runs an async mapper over an array with a bounded concurrency limit.
- *
- * Unlike `Promise.all`, this caps the number of in-flight promises so a
- * large array of independent operations does not exhaust browser connections
- * or Graph/SharePoint throttling budgets.
- */
 export async function mapLimit<T, R>(
   items: T[],
   limit: number,

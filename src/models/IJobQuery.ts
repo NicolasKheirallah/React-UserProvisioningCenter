@@ -1,4 +1,5 @@
 import type { JobStatus, JobType } from './IJob';
+
 export interface IJobQuery {
   search?: string;
   status?: JobStatus[];
@@ -8,6 +9,7 @@ export interface IJobQuery {
   requestedBy?: string;
   top?: number;
 }
+
 export interface IJobSummary {
   itemId: number;
   jobId: string;
@@ -21,6 +23,7 @@ export interface IJobSummary {
   createdUtc: string | null;
   modifiedUtc: string | null;
 }
+
 export function isEmptyJobQuery(query: IJobQuery | undefined): boolean {
   if (!query) {
     return true;

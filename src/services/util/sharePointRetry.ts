@@ -1,28 +1,35 @@
 import { delay } from './delay';
 import { ConcurrencyError } from './ConcurrencyError';
 import { CircuitBreaker, CircuitOpenError } from './circuitBreaker';
+
 const DEFAULT_MAX_ATTEMPTS: number = 4;
 const BASE_BACKOFF_MS: number = 1000;
+
 export const sharePointCircuit: CircuitBreaker = new CircuitBreaker({
   failureThreshold: 5,
   openMs: 20_000,
   maxOpenMs: 2 * 60_000
 });
+
 function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'AbortError';
 }
+
 function hasStatus(err: unknown): err is { status: number } {
   return typeof err === 'object' && err !== null && 'status' in err && typeof (err as { status: unknown }).status === 'number';
 }
+
 function getResponse(err: unknown): { headers?: { get?: (name: string) => string | null } } | undefined {
   if (typeof err === 'object' && err !== null && 'response' in err) {
     return err.response as { headers?: { get?: (name: string) => string | null } };
   }
   return undefined;
 }
+
 function isRetryableStatus(status: number): boolean {
   return status === 429 || status === 503 || status === 504;
 }
+
 function isNetworkFailure(err: unknown): boolean {
   if (!(err instanceof Error)) {
     return false;
@@ -32,6 +39,7 @@ function isNetworkFailure(err: unknown): boolean {
     /failed to fetch|networkerror|network request failed|load failed/i.test(err.message)
   );
 }
+
 export function isRetryableSharePointError(err: unknown): boolean {
   if (isAbortError(err) || err instanceof ConcurrencyError || err instanceof CircuitOpenError) {
     return false;
@@ -41,6 +49,7 @@ export function isRetryableSharePointError(err: unknown): boolean {
   }
   return isNetworkFailure(err);
 }
+
 export function getRetryAfterMs(err: unknown): number | undefined {
   const response = getResponse(err);
   const seconds = response?.headers?.get?.('Retry-After');
@@ -53,12 +62,14 @@ export function getRetryAfterMs(err: unknown): number | undefined {
   }
   return parsed * 1000;
 }
+
 export interface ISharePointRetryOptions {
   maxAttempts?: number;
   signal?: AbortSignal;
   idempotent?: boolean;
   circuitKey?: string;
 }
+
 export async function sharePointRetry<T>(
   action: () => Promise<T>,
   options?: ISharePointRetryOptions
@@ -67,6 +78,7 @@ export async function sharePointRetry<T>(
   const idempotent: boolean = options?.idempotent !== false;
   const circuitKey: string = options?.circuitKey ?? 'sharepoint';
   let lastError: Error | undefined;
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (options?.signal?.aborted) {
       throw new DOMException('SharePoint request aborted', 'AbortError');
@@ -86,6 +98,7 @@ export async function sharePointRetry<T>(
       if (!idempotent) {
         throw lastError;
       }
+
       const retryAfterMs: number = getRetryAfterMs(err) ?? 0;
       const waitMs: number =
         retryAfterMs > 0
@@ -94,5 +107,6 @@ export async function sharePointRetry<T>(
       await delay(waitMs, options?.signal);
     }
   }
+
   throw lastError ?? new Error('Unknown SharePoint retry error');
 }

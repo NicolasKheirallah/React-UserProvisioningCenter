@@ -1,8 +1,6 @@
 export interface IPagedResult<T> {
   items: T[];
-
   truncated: boolean;
-
   next?: () => Promise<IPagedResult<T>>;
 }
 

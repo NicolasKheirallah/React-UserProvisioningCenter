@@ -1,18 +1,10 @@
-/**
- * Approval quorum and delegation (RBAC enhancements).
- *
- * Both are *workflow* controls, not security boundaries. With delegated Graph
- * permissions, effective access is always the operator's own Entra role — a
- * quorum makes an approval policy explicit and auditable, it does not stop a
- * User Administrator from doing the same thing by hand in the portal. Say so
- * plainly in the admin docs rather than implying an enforcement guarantee.
- */
 export interface IApprovalRecord {
   actor: string;
   actorUpn: string;
   timestampUtc: string;
   onBehalfOf?: string;
 }
+
 export interface IApprovalDelegation {
   itemId: number;
   delegatorUpn: string;
@@ -22,6 +14,7 @@ export interface IApprovalDelegation {
   reason: string;
   isActive: boolean;
 }
+
 export interface IApprovalState {
   approvals: IApprovalRecord[];
   required: number;
@@ -29,6 +22,7 @@ export interface IApprovalState {
   satisfied: boolean;
   alreadyApprovedByMe: boolean;
 }
+
 export function isDelegationActive(delegation: IApprovalDelegation, now: number = Date.now()): boolean {
   if (!delegation.isActive || !delegation.delegateUpn) {
     return false;
@@ -43,6 +37,7 @@ export function isDelegationActive(delegation: IApprovalDelegation, now: number 
   }
   return true;
 }
+
 export function evaluateApprovals(
   approvals: IApprovalRecord[],
   required: number,

@@ -1,7 +1,3 @@
-/**
- * Minimal RFC 4180 CSV parser: quoted fields, escaped quotes (""), CR/LF and
- * LF line endings. Returns rows of cells; blank lines are dropped.
- */
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -49,16 +45,17 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
+const FORMULA_TRIGGER: RegExp = /^[=+\-@\t\r]/;
+
 function csvCell(value: string): string {
-  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  const guarded: string = FORMULA_TRIGGER.test(value) ? `'${value}` : value;
+  return /[",\n\r]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
 }
 
-/** Serializes a header row + data rows to RFC 4180 CSV text (CRLF line endings). */
 export function toCsv(header: string[], rows: string[][]): string {
   return [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
 }
 
-/** Triggers a browser download of `text` as a file named `filename`. */
 export function downloadCsv(filename: string, text: string): void {
   const blob: Blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
   const url: string = URL.createObjectURL(blob);
@@ -66,5 +63,5 @@ export function downloadCsv(filename: string, text: string): void {
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }

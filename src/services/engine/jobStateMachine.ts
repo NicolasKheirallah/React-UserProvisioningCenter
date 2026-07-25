@@ -1,10 +1,5 @@
 import type { JobStatus } from '../../models';
 
-/**
- * Job status state machine (spec Section 4 statuses). Client-enforced:
- * with delegated permissions this guards workflow correctness, not security
- * (spec Section 1 — approval is advisory by design).
- */
 const TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   Draft: ['PendingApproval', 'Cancelled'],
   PendingApproval: ['Approved', 'Cancelled'],
@@ -17,7 +12,6 @@ const TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   Cancelled: []
 };
 
-/** Statuses from which the engine may begin (or resume) executing steps. */
 const STARTABLE: JobStatus[] = ['Approved', 'Scheduled', 'Running', 'PartiallyFailed', 'Failed'];
 
 export function canTransition(from: JobStatus, to: JobStatus): boolean {
@@ -30,11 +24,10 @@ export function assertTransition(from: JobStatus, to: JobStatus): void {
   }
 }
 
-/** The engine refuses to start anything not yet approved (Phase 1 acceptance). */
 export function canStartJob(status: JobStatus): boolean {
   return STARTABLE.indexOf(status) !== -1;
 }
 
 export function isTerminal(status: JobStatus): boolean {
-  return TRANSITIONS[status].length === 0;
+  return (TRANSITIONS[status] ?? []).length === 0;
 }
