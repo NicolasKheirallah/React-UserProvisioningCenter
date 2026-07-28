@@ -1,3 +1,5 @@
+import * as strings from 'UpcStrings';
+import { formatString } from '../../util/formatString';
 import {
   STEP_FINALIZE_AUDIT,
   STEP_SEND_NOTIFICATIONS,
@@ -164,12 +166,15 @@ async function runSendNotifications(ctx: IStepContext): Promise<void> {
   }
   const body = {
     message: {
-      subject: `Transfer complete: ${payload.target.displayName}`,
+      subject: formatString(strings.MailTransferCompleteSubject, payload.target.displayName),
       body: {
         contentType: 'Text',
-        content:
-          `${payload.target.displayName}'s (${payload.target.userPrincipalName}) employment ` +
-          `details have been updated: ${summarizeChanges(payload.changes)}.`
+        content: formatString(
+          strings.MailTransferCompleteBody,
+          payload.target.displayName,
+          payload.target.userPrincipalName,
+          summarizeChanges(payload.changes)
+        )
       },
       toRecipients: [{ emailAddress: { address: notifyAddress } }]
     },

@@ -273,7 +273,8 @@ const STATUS_COLORS: Record<JobStatus, string> = {
   PartiallyFailed: tokens.colorPaletteDarkOrangeForeground3,
   Failed: tokens.colorPaletteRedForeground3,
   Completed: tokens.colorPaletteGreenForeground1,
-  Cancelled: tokens.colorNeutralForeground3
+  Cancelled: tokens.colorNeutralForeground3,
+  Rejected: tokens.colorPaletteRedForeground3
 };
 
 const TYPE_COLORS: Record<JobType, string> = {
@@ -387,8 +388,8 @@ const STATUS_ORDER: JobStatus[] = [
   'PartiallyFailed',
   'Failed',
   'Cancelled',
-  'Scheduled',
-
+  'Rejected',
+  'Scheduled'
 ];
 
 const ALL_JOB_TYPES: JobType[] = ['Onboard', 'Offboard', 'Transfer', 'Clone', 'Bulk'];

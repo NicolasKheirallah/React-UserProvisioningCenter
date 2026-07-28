@@ -16,5 +16,7 @@ export const QK_AUDIT_SEARCH: string[] = ['sp', 'auditSearch'];
 export const QK_TEAMS_CATALOG: string[] = ['sp', 'teamsCatalog'];
 export const QK_SITE_CATALOG: string[] = ['sp', 'siteCatalog'];
 export const QK_APPLICATION_CATALOG: string[] = ['sp', 'applicationCatalog'];
+export const QK_APPLICATION_CATALOG_ALL: string[] = ['sp', 'applicationCatalog', 'all'];
+export const QK_LICENSE_COSTS_ALL: string[] = ['sp', 'licenseCosts', 'all'];
 export const QK_ROLES: string[] = ['sp', 'roleDefinitions'];
 export const QK_DELEGATIONS: string[] = ['sp', 'delegations'];

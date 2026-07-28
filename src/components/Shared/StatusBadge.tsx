@@ -13,7 +13,8 @@ const JOB_STATUS_META: Record<JobStatus, { color: BadgeColor; label: () => strin
   PartiallyFailed: { color: 'severe', label: () => strings.StatusPartiallyFailed },
   Failed: { color: 'danger', label: () => strings.StatusFailed },
   Completed: { color: 'success', label: () => strings.StatusCompleted },
-  Cancelled: { color: 'subtle', label: () => strings.StatusCancelled }
+  Cancelled: { color: 'subtle', label: () => strings.StatusCancelled },
+  Rejected: { color: 'danger', label: () => strings.JobStatusRejected }
 };
 
 const STEP_STATUS_META: Record<StepStatus, { color: BadgeColor; label: () => string }> = {

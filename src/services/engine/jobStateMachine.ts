@@ -1,14 +1,15 @@
 import type { JobStatus } from '../../models';
 
 const TRANSITIONS: Record<JobStatus, JobStatus[]> = {
-  PendingApproval: ['Approved', 'Cancelled'],
+  PendingApproval: ['Approved', 'Rejected', 'Cancelled'],
   Approved: ['Scheduled', 'Running', 'Cancelled'],
   Scheduled: ['Running', 'Cancelled'],
   Running: ['Completed', 'PartiallyFailed', 'Failed', 'Cancelled'],
   PartiallyFailed: ['Running', 'Completed', 'Cancelled'],
   Failed: ['Running', 'Cancelled'],
   Completed: [],
-  Cancelled: []
+  Cancelled: [],
+  Rejected: []
 };
 
 const STARTABLE: JobStatus[] = ['Approved', 'Scheduled', 'Running', 'PartiallyFailed', 'Failed'];

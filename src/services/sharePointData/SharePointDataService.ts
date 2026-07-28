@@ -1,4 +1,5 @@
 import { spfi, SPFx, SPFI } from '@pnp/sp';
+import { JSONHeaderParse } from '@pnp/queryable';
 import '@pnp/sp/webs';
 import '@pnp/sp/lists';
 import '@pnp/sp/items';
@@ -43,11 +44,13 @@ import type {
   IAuditQuery,
   IBatchSummary,
   IDepartmentTemplate,
+  IJobNote,
   IJobPayload,
   IJobQuery,
   IJobStep,
   IJobSummary,
   ILicenseCost,
+  ILicenseCostItem,
   IProvisioningJob,
   IRoleDefinition,
   IRoleManagementItem,
@@ -76,6 +79,7 @@ interface IJobListItem {
   TargetUpn: string | null;
   TargetUserId: string | null;
   ApprovalsJson: string | null;
+  NotesJson: string | null;
   Created: string;
   Modified: string;
   RunningSince: string | null;
@@ -96,6 +100,7 @@ const JOB_SELECT: string[] = [
   'TargetUpn',
   'TargetUserId',
   'ApprovalsJson',
+  'NotesJson',
   'Created',
   'Modified',
   'RunningSince',
@@ -169,6 +174,17 @@ function parseJob(item: IJobListItem, telemetry?: TelemetryService): IProvisioni
       'warning'
     );
   }
+  let notes: IJobNote[];
+  try {
+    notes = item.NotesJson ? (JSON.parse(item.NotesJson) as IJobNote[]) : [];
+  } catch {
+    notes = [];
+    telemetry?.trackEvent(
+      'data.parseFailure',
+      { list: LIST_PROVISIONING_JOBS, field: 'NotesJson', itemId: item.Id },
+      'warning'
+    );
+  }
   return {
     itemId: item.Id,
     jobId: item.Title,
@@ -177,6 +193,7 @@ function parseJob(item: IJobListItem, telemetry?: TelemetryService): IProvisioni
     payload,
     steps,
     approvals,
+    notes,
     scheduledFor: item.ScheduledFor,
     requestedBy: item.RequestedBy?.Title ?? null,
     approvedBy: item.ApprovedBy?.Title ?? null,
@@ -311,8 +328,25 @@ export class SharePointDataService {
   public static readonly DEFAULT_JOBS_TOP: number = 500;
   private static readonly DEFAULT_LOCK_STALE_MS: number = 10 * 60 * 1000;
 
+  // PnPJS's item .update() resolves the etag from the response's ETag header
+  // itself (see @pnp/sp/items ItemUpdatedParser) and returns it as `.etag` —
+  // not as an `odata.etag` body property.
   private _etagFromItem(item: unknown): string {
-    return (item as Record<string, string>)['odata.etag'] ?? '*';
+    return (item as { etag?: string } | undefined)?.etag ?? '*';
+  }
+
+  // Selecting the `odata.etag` pseudo-field in $select 400s against this
+  // tenant's REST configuration ("The field or property 'odata.etag' does
+  // not exist") — the default Accept header PnPJS sends doesn't request the
+  // OData metadata level that pseudo-field requires. The ETag is always
+  // present as a plain HTTP response header regardless of metadata level, so
+  // read it from there instead via JSONHeaderParse.
+  private async _getJobWithEtag<T>(itemId: number, selectFields: string[]): Promise<{ item: T; etag: string }> {
+    const result: { data: T; headers: Headers } = await this._jobs()
+      .items.getById(itemId)
+      .select(...selectFields)
+      .using(JSONHeaderParse())();
+    return { item: result.data, etag: result.headers.get('etag') ?? '*' };
   }
 
   private async _me(): Promise<{ Id: number; Title: string; LoginName: string }> {
@@ -363,14 +397,9 @@ export class SharePointDataService {
 
   private async _traceQuery<T>(name: string, list: string, action: () => Promise<T>): Promise<T> {
     const started: number = Date.now();
-    this._telemetry?.trackEvent('data.query.start', { name, list }, 'warning');
     try {
       const result: T = await action();
-      this._telemetry?.trackEvent(
-        'data.query.end',
-        { name, list, durationMs: Date.now() - started },
-        'warning'
-      );
+      this._telemetry?.trackEvent('data.query.end', { name, list, durationMs: Date.now() - started }, 'info');
       return result;
     } catch (err) {
       this._telemetry?.trackEvent(
@@ -400,8 +429,7 @@ export class SharePointDataService {
   ): Promise<string> {
     return sharePointRetry(
       async () => {
-        const useEtag: string =
-          etag ?? this._etagFromItem(await this._jobs().items.getById(itemId).select('odata.etag')());
+        const useEtag: string = etag ?? (await this._getJobWithEtag<{ Id: number }>(itemId, ['Id'])).etag;
         try {
           const updated = await this._jobs().items.getById(itemId).update(fields, useEtag);
           return this._etagFromItem(updated);
@@ -422,8 +450,11 @@ export class SharePointDataService {
   }
 
   public async getJobsPaged(top: number = SharePointDataService.DEFAULT_JOBS_TOP): Promise<IPagedResult<IProvisioningJob>> {
+    // Degrade like getJob does: an install that predates a column (NotesJson,
+    // ApprovalsJson, …) must still list jobs rather than 400 on $select.
+    const jobSelect: string[] = await this._supportedSelect(LIST_PROVISIONING_JOBS, JOB_SELECT);
     const query = this._jobs()
-      .items.select(...JOB_SELECT, 'odata.etag')
+      .items.select(...jobSelect)
       .expand('RequestedBy', 'ApprovedBy')
       .orderBy('Id', false)
       .top(top) as unknown as AsyncIterable<IJobListItem[]>;
@@ -539,7 +570,7 @@ export class SharePointDataService {
       () =>
         this._jobs()
           .items.getById(itemId)
-          .select(...jobSelect, 'odata.etag')
+          .select(...jobSelect)
           .expand('RequestedBy', 'ApprovedBy')(),
       { circuitKey: LIST_PROVISIONING_JOBS }
     );
@@ -637,6 +668,26 @@ export class SharePointDataService {
     return this._updateJob(itemId, { StepsJson: JSON.stringify(steps) }, etag);
   }
 
+  /**
+   * Appends a note to the job. Read-modify-write against NotesJson: notes are
+   * low-frequency and human-authored, so the etag on _updateJob is enough to
+   * turn a lost update into a visible JobConflictError rather than silent loss.
+   */
+  public async appendJobNote(itemId: number, note: IJobNote): Promise<IJobNote[]> {
+    const job: IProvisioningJob = await this.getJob(itemId);
+    const notes: IJobNote[] = [...(job.notes ?? []), note];
+    await this._updateJob(itemId, { NotesJson: JSON.stringify(notes) });
+    return notes;
+  }
+
+  /** Rejects a pending job, recording the reason as a rejection note. */
+  public async rejectJob(itemId: number, note: IJobNote): Promise<void> {
+    const job: IProvisioningJob = await this.getJob(itemId);
+    assertTransition(job.status, 'Rejected');
+    const notes: IJobNote[] = [...(job.notes ?? []), note];
+    await this._updateJob(itemId, { Status: 'Rejected', NotesJson: JSON.stringify(notes) });
+  }
+
   public async setJobTargetUser(itemId: number, targetUserId: string, etag?: string): Promise<string> {
     return this._updateJob(itemId, { TargetUserId: targetUserId }, etag);
   }
@@ -648,8 +699,10 @@ export class SharePointDataService {
   ): Promise<string> {
     return sharePointRetry(
       async () => {
-        const item: { RunningInstanceId?: string | null; RunningSince?: string | null; 'odata.etag'?: string } =
-          await this._jobs().items.getById(itemId).select('Id', 'RunningInstanceId', 'RunningSince', 'odata.etag')();
+        const { item, etag } = await this._getJobWithEtag<{ RunningInstanceId?: string | null; RunningSince?: string | null }>(
+          itemId,
+          ['Id', 'RunningInstanceId', 'RunningSince']
+        );
 
         const currentLock: string | null = item.RunningInstanceId ?? null;
         const currentSince: string | null = item.RunningSince ?? null;
@@ -665,10 +718,7 @@ export class SharePointDataService {
 
         const updated = await this._jobs()
           .items.getById(itemId)
-          .update(
-            { RunningInstanceId: instanceId, RunningSince: new Date().toISOString() },
-            this._etagFromItem(item)
-          );
+          .update({ RunningInstanceId: instanceId, RunningSince: new Date().toISOString() }, etag);
         return this._etagFromItem(updated);
       },
       { circuitKey: LIST_PROVISIONING_JOBS }
@@ -678,9 +728,9 @@ export class SharePointDataService {
   public async releaseJobLock(itemId: number, instanceId: string): Promise<void> {
     await sharePointRetry(
       async () => {
-        const item: { RunningInstanceId?: string | null; 'odata.etag'?: string } = await this._jobs()
-          .items.getById(itemId)
-          .select('RunningInstanceId', 'odata.etag')();
+        const { item, etag } = await this._getJobWithEtag<{ RunningInstanceId?: string | null }>(itemId, [
+          'RunningInstanceId'
+        ]);
 
         if (item.RunningInstanceId !== instanceId) {
           return;
@@ -688,7 +738,7 @@ export class SharePointDataService {
 
         await this._jobs()
           .items.getById(itemId)
-          .update({ RunningInstanceId: null, RunningSince: null }, this._etagFromItem(item));
+          .update({ RunningInstanceId: null, RunningSince: null }, etag);
       },
       { circuitKey: LIST_PROVISIONING_JOBS }
     );
@@ -957,6 +1007,135 @@ export class SharePointDataService {
       instructions: i.Instructions ?? '',
       isActive: i.IsActive !== false
     }));
+  }
+
+  // ---------------------------------------------------------------- Catalog management
+  // The read paths above are tuned for the wizards (active rows only). The
+  // Catalogs tab needs every row, including deactivated ones, so it gets its
+  // own unfiltered reader.
+
+  public async getApplicationCatalogAll(): Promise<IApplicationCatalogItem[]> {
+    const items: {
+      Id: number;
+      Title: string;
+      Owner?: { Title: string } | null;
+      ProvisioningType: string | null;
+      TargetGroupId: string | null;
+      ApprovalRequired: boolean | null;
+      Instructions: string | null;
+      IsActive: boolean | null;
+    }[] = await sharePointRetry(
+      () =>
+        this._sp.web.lists
+          .getByTitle(LIST_APPLICATION_CATALOG)
+          .items.select(
+            'Id',
+            'Title',
+            'Owner/Title',
+            'ProvisioningType',
+            'TargetGroupId',
+            'ApprovalRequired',
+            'Instructions',
+            'IsActive'
+          )
+          .expand('Owner')
+          .top(500)(),
+      { circuitKey: LIST_APPLICATION_CATALOG }
+    );
+    return items.map((i) => ({
+      itemId: i.Id,
+      title: i.Title,
+      owner: i.Owner?.Title ?? null,
+      provisioningType: (i.ProvisioningType === 'GroupBased' ? 'GroupBased' : 'Manual') as ApplicationProvisioningType,
+      targetGroupId: i.TargetGroupId,
+      approvalRequired: !!i.ApprovalRequired,
+      instructions: i.Instructions ?? '',
+      isActive: i.IsActive !== false
+    }));
+  }
+
+  public async getLicenseCostsForManagement(): Promise<ILicenseCostItem[]> {
+    const items: { Id: number; Title: string; MonthlyCost: number; Currency: string }[] = await sharePointRetry(
+      () =>
+        this._sp.web.lists
+          .getByTitle(LIST_LICENSE_COST_TABLE)
+          .items.select('Id', 'Title', 'MonthlyCost', 'Currency')
+          .top(500)(),
+      { circuitKey: LIST_LICENSE_COST_TABLE }
+    );
+    return items.map((i) => ({
+      itemId: i.Id,
+      skuPartNumber: i.Title,
+      monthlyCost: i.MonthlyCost ?? 0,
+      currency: i.Currency ?? ''
+    }));
+  }
+
+  public async saveTeamsCatalogItem(item: Omit<ITeamsCatalogItem, 'itemId'> & { itemId?: number }): Promise<void> {
+    const fields: Record<string, unknown> = {
+      Title: item.title,
+      TeamId: item.teamId,
+      Category: item.category,
+      DefaultRole: item.defaultRole
+    };
+    await this._saveCatalogItem(LIST_TEAMS_CATALOG, fields, item.itemId);
+  }
+
+  public async saveSiteCatalogItem(item: Omit<ISiteCatalogItem, 'itemId' | 'businessOwner'> & { itemId?: number }): Promise<void> {
+    const fields: Record<string, unknown> = {
+      Title: item.title,
+      SiteUrl: item.siteUrl,
+      Category: item.category
+    };
+    await this._saveCatalogItem(LIST_SITE_CATALOG, fields, item.itemId);
+  }
+
+  public async saveApplicationCatalogItem(
+    item: Omit<IApplicationCatalogItem, 'itemId' | 'owner'> & { itemId?: number }
+  ): Promise<void> {
+    const fields: Record<string, unknown> = {
+      Title: item.title,
+      ProvisioningType: item.provisioningType,
+      TargetGroupId: item.targetGroupId ?? '',
+      ApprovalRequired: item.approvalRequired,
+      Instructions: item.instructions,
+      IsActive: item.isActive
+    };
+    await this._saveCatalogItem(LIST_APPLICATION_CATALOG, fields, item.itemId);
+  }
+
+  public async saveLicenseCostItem(item: Omit<ILicenseCostItem, 'itemId'> & { itemId?: number }): Promise<void> {
+    const fields: Record<string, unknown> = {
+      Title: item.skuPartNumber,
+      MonthlyCost: item.monthlyCost,
+      Currency: item.currency
+    };
+    await this._saveCatalogItem(LIST_LICENSE_COST_TABLE, fields, item.itemId);
+  }
+
+  public async deleteCatalogItem(listTitle: string, itemId: number): Promise<void> {
+    await sharePointRetry(() => this._sp.web.lists.getByTitle(listTitle).items.getById(itemId).delete(), {
+      idempotent: false,
+      circuitKey: listTitle
+    });
+  }
+
+  private async _saveCatalogItem(
+    listTitle: string,
+    fields: Record<string, unknown>,
+    itemId?: number
+  ): Promise<void> {
+    await sharePointRetry(
+      async () => {
+        const list = this._sp.web.lists.getByTitle(listTitle);
+        if (itemId === undefined) {
+          await list.items.add(fields);
+        } else {
+          await list.items.getById(itemId).update(fields);
+        }
+      },
+      { idempotent: false, circuitKey: listTitle }
+    );
   }
 
   public async getActiveTemplates(): Promise<ITemplateListItem[]> {

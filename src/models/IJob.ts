@@ -27,7 +27,18 @@ export type JobStatus =
   | 'PartiallyFailed'
   | 'Failed'
   | 'Completed'
-  | 'Cancelled';
+  | 'Cancelled'
+  | 'Rejected';
+
+export type JobNoteKind = 'note' | 'rejection';
+
+export interface IJobNote {
+  author: string;
+  authorUpn: string;
+  timestampUtc: string;
+  text: string;
+  kind: JobNoteKind;
+}
 
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
@@ -56,6 +67,7 @@ export interface IProvisioningJob {
   payload: IJobPayload;
   steps: IJobStep[];
   approvals: IApprovalRecord[];
+  notes: IJobNote[];
   scheduledFor: string | null;
   requestedBy: string | null;
   approvedBy: string | null;

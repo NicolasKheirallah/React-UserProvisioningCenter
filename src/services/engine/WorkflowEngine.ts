@@ -10,15 +10,18 @@ import type { IAuthorizationService } from './IAuthorizationService';
 import { AuthorizationError } from './AuthorizationError';
 import { generateTempPassword } from '../passwords/passwordGenerator';
 import { newGuid } from '../util/guid';
+import * as strings from 'UpcStrings';
 import type {
   AppPermission,
   IAppSettings,
   IApprovalDelegation,
   IDepartmentTemplate,
+  IJobNote,
   IJobStep,
   IProvisioningJob,
   JobType
 } from '../../models';
+import { formatString } from '../util/formatString';
 import { DEFAULT_APP_SETTINGS, isOnboardingPayload } from '../../models';
 import { assertTransition, canStartJob, isTerminal } from './jobStateMachine';
 import { stepsForJobType } from './stepRegistry';
@@ -126,7 +129,104 @@ export class WorkflowEngine {
       targetUpn: targetUserOf(request.payload),
       initialStatus: request.initialStatus
     };
-    return this._deps.data.createJob(input);
+    const itemId: number = await this._deps.data.createJob(input);
+    if ((request.initialStatus ?? 'PendingApproval') === 'PendingApproval') {
+      await this._notifyApprovalPending(input.targetUpn ?? '', request.jobType);
+    }
+    return itemId;
+  }
+
+  /**
+   * Best-effort "a job is waiting for you" mail to the address configured in
+   * Settings. Never fails the job creation it follows — a bounced notification
+   * must not cost the operator the job they just submitted.
+   */
+  private async _notifyApprovalPending(targetUpn: string, jobType: JobType): Promise<void> {
+    const to: string = (this._settings.approvalNotifyUpn ?? '').trim();
+    if (!to) {
+      return;
+    }
+    const body = {
+      message: {
+        subject: formatString(strings.MailApprovalPendingSubject, jobType, targetUpn),
+        body: {
+          contentType: 'Text',
+          content: formatString(
+            strings.MailApprovalPendingBody,
+            jobType,
+            targetUpn,
+            this._deps.operatorDisplayName ?? this._deps.operatorUpn
+          )
+        },
+        toRecipients: [{ emailAddress: { address: to } }]
+      },
+      saveToSentItems: false
+    };
+    try {
+      await this._deps.graph.post<void>('/me/sendMail', body);
+    } catch (err) {
+      this._deps.telemetry?.trackEvent(
+        'engine.approvalNotifyFailed',
+        { to, message: err instanceof Error ? err.message : String(err) },
+        'warning'
+      );
+    }
+  }
+
+  /**
+   * Creates a fresh job carrying the same payload as an existing one, with a
+   * new correlation id and a clean step pipeline. Used to re-run something
+   * that was cancelled, rejected or rolled back without retyping the wizard.
+   */
+  public async duplicateJob(itemId: number): Promise<number> {
+    await this._deps.auth.require('createJobs');
+    const source: IProvisioningJob = await this._deps.data.getJob(itemId);
+    return this.createJob({
+      jobType: source.jobType,
+      payload: source.payload,
+      steps: this.buildInitialSteps(source.jobType),
+      scheduledFor: null,
+      initialStatus: this._settings.requireApproval ? 'PendingApproval' : 'Approved'
+    });
+  }
+
+  public async addJobNote(itemId: number, text: string): Promise<IJobNote[]> {
+    const trimmed: string = text.trim();
+    if (!trimmed) {
+      throw new Error('A note cannot be empty');
+    }
+    return this._deps.data.appendJobNote(itemId, this._note(trimmed, 'note'));
+  }
+
+  public async rejectJob(itemId: number, reason: string): Promise<void> {
+    await this._deps.auth.require('approveJobs');
+    const trimmed: string = reason.trim();
+    if (!trimmed) {
+      throw new Error('A rejection reason is required');
+    }
+    const job: IProvisioningJob = await this._deps.data.getJob(itemId);
+    await this._deps.data.rejectJob(itemId, this._note(trimmed, 'rejection'));
+    await this._deps.audit.log({
+      jobId: job.jobId,
+      action: 'reject-job',
+      targetUser: targetUserOf(job.payload),
+      graphEndpoint: '',
+      requestSummary: JSON.stringify({ reason: trimmed }),
+      responseCode: 0,
+      durationMs: 0,
+      result: 'Success',
+      correlationId: job.correlationId
+    });
+  }
+
+  private _note(text: string, kind: IJobNote['kind']): IJobNote {
+    return {
+      author: this._deps.operatorDisplayName ?? this._deps.operatorUpn,
+      authorUpn: this._deps.operatorUpn,
+      timestampUtc: new Date().toISOString(),
+      text,
+      kind
+    };
   }
 
   private async _withLock<T>(itemId: number, fn: (instanceId: string, initialEtag: string) => Promise<T>): Promise<T> {

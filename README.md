@@ -124,15 +124,17 @@ lists and seed the roles — see [Deployment checklist](#deployment-checklist).
 
 | Surface | What it does | Visible to |
 |---|---|---|
-| **Dashboard** | KPI tiles that double as filters (pending approval, running, failed/completed last 7 days), search, type filter, sortable job grid with inline **Approve**, CSV export, a job drawer with live step progress, Run/Resume/Retry/Skip/Cancel/**Rollback**, credential regeneration for completed jobs, and a per-job audit trail (also CSV-exportable) | everyone |
+| **Dashboard** | KPI tiles that double as filters (pending approval, running, failed/completed last 7 days), search, type filter, an **Only my requests** filter, sortable job grid with inline **Approve**, CSV export, a job drawer with live step progress, Run/Resume/Retry/Skip/Cancel/**Reject**/**Rollback**/**Duplicate**, free-text notes, credential regeneration for completed jobs, and a per-job audit trail (also CSV-exportable) | everyone |
 | **New user** | Seven-step onboarding wizard (Personal → Employment → Identity → Account → Licenses → Access → Review) with template pre-fill, live UPN candidates from the naming policy engine, duplicate-employeeId checks, per-section review edit links, guest invites (`/invitations` instead of a cloud account), an access grants step (security/M365 groups, Teams, SharePoint sites, applications), an optional future-dated access-review task, and the option to clone an existing user's access profile onto a new hire. Drafts survive tab switches; **Start over** discards them | everyone |
 | **Offboard user** | Four-step wizard: pick the user → access removal choices (sign-in block and session revocation always run — routed to a manual on-prem AD task rather than a Graph write for hybrid-synced users; licenses, groups, mailbox action, OneDrive hand-over are all optional) → immediate or dated → review. Completion emails the OneDrive hand-over contact if one was named | everyone |
 | **Transfer** | Single-page form for an existing user — job title, department, office and manager changes (leave blank for no change) plus license add/remove — run through the same job/approval pipeline as everything else. Completion emails the user's current manager a summary of what changed | everyone |
 | **Bulk import** | CSV upload (a template is downloadable) → per-row validation including directory duplicate checks and UPN resolution → one Onboard job per valid row. An optional `template` column applies a named department template's access grants and review window to that row | everyone |
 | **Bulk offboard** | CSV upload of sign-in names → per-row directory lookup → one Offboard job per resolved row | everyone |
+| **Bulk transfer** | CSV upload of existing users with the employment fields to change (blank = no change) → per-row directory lookup, manager resolution and SKU-part-number validation → one Transfer job per valid row, sharing a batch id | everyone |
 | **Tasks** | The service-desk queue for everything the engine routed to `UPC_Tasks`; completing a task stamps who and when; CSV export | `manageTasks` |
 | **Templates** | Department templates that pre-fill the wizard — department, usage location, license set, access grants, expiration review policy — versioned and activatable. Can also name an Entra group that alone may approve jobs created from that template (per-template approval routing) | `manageTemplates` |
-| **Settings** | Tenant-shared configuration: approval gate on/off, bulk row limit, dashboard refresh interval | `manageSettings` |
+| **Catalogs** | In-app editor for the four reference lists the wizards read from — Teams, SharePoint sites, applications and the license cost table. Previously these could only be populated by hand-editing the SharePoint lists | `manageTemplates` |
+| **Settings** | Tenant-shared configuration: approval gate on/off, required approvals, bulk row limit, dashboard refresh interval, and the address notified when a job needs approval | `manageSettings` |
 | **Roles** | Maps each app role to an Entra security group and the UI permissions it grants, editable in-app instead of hand-editing `UPC_Roles`. Also hosts **approval delegations** — time-boxed `approveJobs` hand-offs to another operator, with a reason | `manageSettings` (role mapping), `manageDelegations` (delegations) |
 
 Tabs a user isn't permitted to see are **not just disabled, they're gone**.
@@ -166,6 +168,30 @@ delegation is active, the delegate is granted `approveJobs` for the duration
 regardless of their own role assignment. Delegations are self-service — no
 approval loop of their own — so scope who can reach `manageDelegations`
 accordingly.
+
+**Rejecting.** An approver can also reject a pending job, which requires a
+reason. The job moves to a terminal **Rejected** status, the reason is stored
+as a note on the job and written to the audit trail, and the requester sees
+both in the job drawer. Rejection is deliberately distinct from Cancel:
+cancel is "stop this", reject is "no, and here's why".
+
+**Notification.** If **Settings → Notify this address when approval is
+needed** holds a mailbox or distribution list, a mail goes out via
+`/me/sendMail` whenever a job enters Pending approval. It's best-effort — a
+failed notification is logged as a warning and never fails the job creation
+that triggered it. Leave the field blank to disable.
+
+### Notes and duplicate
+
+Every job carries a free-text note thread (`NotesJson`), visible and
+appendable from the job drawer — for handing context to whoever picks the job
+up next. Rejection reasons land in the same thread, tagged as such.
+
+Any job in a terminal state (completed, cancelled, rejected, failed) can be
+**duplicated** from the drawer: same payload and job type, fresh correlation
+id and clean step pipeline, re-entering the approval gate per current
+settings. That saves retyping a whole wizard to re-run something that was
+rejected or rolled back.
 
 ### Rollback
 
@@ -238,6 +264,13 @@ npm run build      # produces sharepoint/solution/user-provisioning-center.sppkg
    Auditor, ReadOnly) with the canonical permission sets already filled into
    `PermissionsJson` — you only need to paste the matching Entra security
    group object id into `MemberGroupId` for each one.
+
+   > **Upgrading an existing install? Re-run provisioning** (either path) —
+   > it's idempotent and adds the `NotesJson` column and the `Rejected` status
+   > choice on `UPC_ProvisioningJobs` that job notes and rejection need.
+   > *Reads* degrade safely without it (the missing column is dropped from
+   > `$select`, so job lists and details still load), but *writing* a note or
+   > rejecting a job will fail against the old schema until you do.
 3. Seed **`UPC_Roles`**: one row per app role, `MemberGroupId` pointing at an
    Entra security group object id, `PermissionsJson` holding the permission
    verbs that role grants. The full verb set:
@@ -252,16 +285,42 @@ npm run build      # produces sharepoint/solution/user-provisioning-center.sppkg
    only thing left to set. Roles drive **UI visibility only**; actual
    enforcement is always the operator's own Entra directory roles. Reload the
    page after editing roles for changes to take effect.
-4. Fill in `UPC_LicenseCostTable` (`Title` = the SKU part number) if you want
-   per-month license costs surfaced in the wizard.
+4. Populate the catalogs from the **Catalogs** tab (`manageTemplates`) — the
+   Teams, SharePoint sites and applications the onboarding wizard offers, plus
+   `UPC_LicenseCostTable` (SKU part number → monthly cost) if you want per-month
+   license costs surfaced in the wizard. Editing the underlying `UPC_*` lists
+   directly still works; the tab just means you don't have to.
+5. *Optional:* if you use dated offboarding, deploy the due-jobs digest Flow in
+   [provisioning-assets/due-jobs-flow.md](./provisioning-assets/due-jobs-flow.md).
+   It emails the service desk when a job reaches its scheduled date. The Flow is
+   **read-only** — it holds no Graph permission and never provisions anything;
+   an operator still runs each job from the web part under their own
+   permissions. See [Scheduling](#scheduling) for what it does and doesn't fix.
+
+## Scheduling
+
+Dated jobs are currently **surfaced, not enforced**. A job carries a
+`ScheduledFor` date (set by the offboarding wizard's *Scheduled* timing
+option), and the job drawer shows it — but the engine gates execution on
+status alone, so nothing stops an operator running a job before its date, and
+there is no in-app due-jobs banner. Onboarding and Transfer always submit
+`scheduledFor: null` today.
+
+Because this solution has no backend, "scheduled" can only ever mean *gated
+until its date, then surfaced* — never *fires by itself*. Nothing runs without
+an operator with the app open. The optional
+[digest Flow](./provisioning-assets/due-jobs-flow.md) covers the "nobody
+noticed it came due" half of that, without touching the delegated-permission
+security model. Engine-side date gating and an in-app due banner are separate,
+still-open work.
 
 ## Project layout
 
 ```text
 /src
   /components   App shell + tabs: Jobs (dashboard), Onboarding, Offboarding,
-                Transfer, Bulk, Tasks, Templates, Settings, Roles, Preflight,
-                Shared
+                Transfer, Bulk, Tasks, Templates, Catalogs, Settings, Roles,
+                Audit, Preflight, Shared
   /services     graph, engine (step registry + onboarding/offboarding/transfer
                 steps), sites (SharePoint site access via PnPJS), namingPolicy,
                 sharePointData, audit, roles, preflight, users, licenses,
@@ -269,8 +328,9 @@ npm run build      # produces sharepoint/solution/user-provisioning-center.sppkg
   /theme        SharePoint/Teams → Fluent v9 theme bridge
   /hooks /models /validators /contexts /constants /loc   (en-US + sv-SE)
 /provisioning-assets
-  lists.ps1     PnP PowerShell — creates and seeds the UPC_* lists
-  README.md     Permission model, Entra role matrix, known limitations
+  lists.ps1          PnP PowerShell — creates and seeds the UPC_* lists
+  README.md          Permission model, Entra role matrix, known limitations
+  due-jobs-flow.md   Optional read-only Power Automate digest for due jobs
 ```
 
 ### Engine notes, for anyone touching the workflow code

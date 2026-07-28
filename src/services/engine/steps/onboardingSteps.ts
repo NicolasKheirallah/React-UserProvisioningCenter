@@ -1,5 +1,7 @@
+import * as strings from 'UpcStrings';
 import { validatePayload } from '../../../validators/payloadValidator';
 import { generateTempPassword } from '../../passwords/passwordGenerator';
+import { formatString } from '../../util/formatString';
 import {
   STEP_ASSIGN_APPLICATIONS,
   STEP_ASSIGN_GROUPS,
@@ -650,10 +652,14 @@ async function runSendNotifications(ctx: IStepContext): Promise<void> {
   }
   const body = {
     message: {
-      subject: `Onboarding complete: ${payload.personal.displayName}`,
+      subject: formatString(strings.MailOnboardCompleteSubject, payload.personal.displayName),
       body: {
         contentType: 'Text',
-        content: `${payload.personal.displayName}'s account (${payload.identity.userPrincipalName}) has been provisioned and is ready for first sign-in.`
+        content: formatString(
+          strings.MailOnboardCompleteBody,
+          payload.personal.displayName,
+          payload.identity.userPrincipalName
+        )
       },
       toRecipients: [{ emailAddress: { address: managerUpn } }]
     },

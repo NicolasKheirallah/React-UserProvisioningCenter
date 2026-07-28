@@ -43,8 +43,18 @@ const BulkOffboard = React.lazy(() =>
     default: m.BulkOffboard
   }))
 );
+const BulkTransfer = React.lazy(() =>
+  import(/* webpackChunkName: 'upc-bulk-transfer' */ './Bulk/BulkTransfer').then((m) => ({
+    default: m.BulkTransfer
+  }))
+);
 const TasksList = React.lazy(() =>
   import(/* webpackChunkName: 'upc-tasks' */ './Tasks/TasksList').then((m) => ({ default: m.TasksList }))
+);
+const CatalogsPanel = React.lazy(() =>
+  import(/* webpackChunkName: 'upc-catalogs' */ './Catalogs/CatalogsPanel').then((m) => ({
+    default: m.CatalogsPanel
+  }))
 );
 const TemplatesList = React.lazy(() =>
   import(/* webpackChunkName: 'upc-templates' */ './Templates/TemplatesList').then((m) => ({ default: m.TemplatesList }))
@@ -100,8 +110,10 @@ type ShellTab =
   | 'transfer'
   | 'bulk'
   | 'bulkOffboard'
+  | 'bulkTransfer'
   | 'tasks'
   | 'templates'
+  | 'catalogs'
   | 'settings'
   | 'roles'
   | 'audit';
@@ -168,8 +180,10 @@ const Shell: React.FC = () => {
           {canCreateJobs ? <Tab value="transfer">{strings.TabTransfer}</Tab> : undefined}
           {canCreateJobs ? <Tab value="bulk">{strings.TabBulk}</Tab> : undefined}
           {canCreateJobs ? <Tab value="bulkOffboard">{strings.TabBulkOffboard}</Tab> : undefined}
+          {canCreateJobs ? <Tab value="bulkTransfer">{strings.TabBulkTransfer}</Tab> : undefined}
           {canManageTasks ? <Tab value="tasks">{strings.TabTasks}</Tab> : undefined}
           {canManageTemplates ? <Tab value="templates">{strings.TabTemplates}</Tab> : undefined}
+          {canManageTemplates ? <Tab value="catalogs">{strings.TabCatalogs}</Tab> : undefined}
           {canManageSettings ? <Tab value="settings">{strings.TabSettings}</Tab> : undefined}
           {canManageSettings || canManageDelegations ? <Tab value="roles">{strings.TabRoles}</Tab> : undefined}
           {canViewAudit ? <Tab value="audit">{strings.TabAudit}</Tab> : undefined}
@@ -195,6 +209,11 @@ const Shell: React.FC = () => {
             <BulkOffboard onSubmitted={goToDashboard} />
           </React.Suspense>
         ) : undefined}
+        {tab === 'bulkTransfer' && canCreateJobs ? (
+          <React.Suspense fallback={<Spinner aria-label={strings.LoadingLabel} />}>
+            <BulkTransfer onSubmitted={goToDashboard} />
+          </React.Suspense>
+        ) : undefined}
         {tab === 'tasks' && canManageTasks ? (
           <React.Suspense fallback={<Spinner aria-label={strings.LoadingLabel} />}>
             <TasksList />
@@ -203,6 +222,11 @@ const Shell: React.FC = () => {
         {tab === 'templates' && canManageTemplates ? (
           <React.Suspense fallback={<Spinner aria-label={strings.LoadingLabel} />}>
             <TemplatesList />
+          </React.Suspense>
+        ) : undefined}
+        {tab === 'catalogs' && canManageTemplates ? (
+          <React.Suspense fallback={<Spinner aria-label={strings.LoadingLabel} />}>
+            <CatalogsPanel />
           </React.Suspense>
         ) : undefined}
         {tab === 'settings' && canManageSettings ? (

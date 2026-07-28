@@ -65,9 +65,15 @@ export class TelemetryService {
     return this._buffer;
   }
 
+  // Routine 'info' events (query traces, successful Graph calls) are kept in
+  // the ring buffer for __UPC.dump() / DiagnosticsPanel but not mirrored to
+  // the console — only warnings and errors are, so the console stays quiet
+  // in the common case and only speaks up when something is actually wrong.
   private _emit(evt: ITelemetryEvent): void {
-    const fn: typeof console.log =
-      evt.level === 'error' ? console.error : evt.level === 'warning' ? console.warn : console.info;
+    if (evt.level === 'info') {
+      return;
+    }
+    const fn: typeof console.log = evt.level === 'error' ? console.error : console.warn;
     fn.call(console, `[UPC] ${evt.name}`, evt.properties ?? {});
   }
 

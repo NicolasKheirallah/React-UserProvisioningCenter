@@ -28,6 +28,8 @@ export interface IServices {
   siteAccess: SiteAccessService;
   auth: IAuthorizationService;
   operatorUpn: string;
+  /** Display name, as it appears in SharePoint people fields (RequestedBy/Title). */
+  operatorDisplayName: string;
   photoUrl: (upn: string) => string;
 }
 
@@ -65,7 +67,7 @@ export async function createServices(context: WebPartContext): Promise<IServices
   telemetry.trackEvent(
     'app.servicesReady',
     { web: context.pageContext.web.absoluteUrl, operatorUpn },
-    'warning'
+    'info'
   );
   const webUrl: string = context.pageContext.web.absoluteUrl;
   const photoUrl = (upn: string): string =>
@@ -84,6 +86,7 @@ export async function createServices(context: WebPartContext): Promise<IServices
     siteAccess,
     auth,
     operatorUpn,
+    operatorDisplayName: context.pageContext.user.displayName,
     photoUrl
   };
 }

@@ -2,6 +2,7 @@ import * as React from 'react';
 import {
   Badge,
   Button,
+  Checkbox,
   Dropdown,
   MessageBar,
   MessageBarActions,
@@ -137,7 +138,16 @@ const useStyles = makeStyles({
 });
 
 const JOB_TYPES: readonly JobType[] = ['Onboard', 'Offboard', 'Transfer', 'Clone', 'Bulk'];
-const STATUS_FILTERS: readonly JobStatus[] = ['PendingApproval', 'Approved', 'Running', 'PartiallyFailed', 'Failed', 'Completed', 'Cancelled'];
+const STATUS_FILTERS: readonly JobStatus[] = [
+  'PendingApproval',
+  'Approved',
+  'Running',
+  'PartiallyFailed',
+  'Failed',
+  'Completed',
+  'Cancelled',
+  'Rejected'
+];
 
 type KpiKey = 'pending' | 'running' | 'failed7' | 'completedToday';
 
@@ -187,6 +197,7 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
   const [scrollTop, setScrollTop] = React.useState<number>(0);
   const [batchFilter, setBatchFilter] = React.useState<string | null>(null);
   const [isRetryingBatch, setIsRetryingBatch] = React.useState<boolean>(false);
+  const [mineOnly, setMineOnly] = React.useState<boolean>(false);
 
   const canApprove: boolean = roles.data?.permissions.has('approveJobs') ?? false;
 
@@ -200,9 +211,12 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
       search: deferredSearch.trim() || undefined,
       status,
       jobType: typeFilter !== 'all' ? [typeFilter] : undefined,
-      batchId: batchFilter ?? undefined
+      batchId: batchFilter ?? undefined,
+      // RequestedBy is a SharePoint people field, so the server-side filter
+      // matches on display name rather than UPN.
+      requestedBy: mineOnly ? services.operatorDisplayName : undefined
     };
-  }, [kpi, statusFilter, typeFilter, deferredSearch, batchFilter]);
+  }, [kpi, statusFilter, typeFilter, deferredSearch, batchFilter, mineOnly, services.operatorDisplayName]);
 
   const jobs = useJobSummaries(query, false);
   const changeToken = useJobsChangeToken(true);
@@ -304,7 +318,8 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
 
   const items: IJobSummary[] = [...(jobs.data?.items ?? []), ...tailPages];
   const truncated: boolean = tailTruncated || (tailPages.length === 0 && (jobs.data?.truncated ?? false));
-  const hasActiveFilters: boolean = !!kpi || typeFilter !== 'all' || statusFilter !== 'all' || !!query.search || !!batchFilter;
+  const hasActiveFilters: boolean =
+    !!kpi || typeFilter !== 'all' || statusFilter !== 'all' || !!query.search || !!batchFilter || mineOnly;
 
   const exportCsv = (): void => {
     const csv: string = toCsv(
@@ -452,6 +467,11 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
               </Option>
             ))}
           </Dropdown>
+          <Checkbox
+            label={strings.MyRequestsFilterLabel}
+            checked={mineOnly}
+            onChange={(_, data) => setMineOnly(!!data.checked)}
+          />
         </div>
         <div aria-busy={jobs.isFetching}>
           {items.length === 0 ? (
@@ -508,9 +528,7 @@ export const JobsList: React.FC<IJobsListProps> = ({ onCreateNew }) => {
                           }}
                         >
                           <td className={styles.cell}>
-                            <Button appearance="transparent" className={styles.targetButton}>
-                              {targetOf(job)}
-                            </Button>
+                            <Text className={styles.targetButton}>{targetOf(job)}</Text>
                           </td>
                           <td className={styles.cell}>
                             {jobTypeLabel(job.jobType)}

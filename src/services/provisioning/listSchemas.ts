@@ -73,12 +73,15 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
           'PartiallyFailed',
           'Failed',
           'Completed',
-          'Cancelled'
+          'Cancelled',
+          'Rejected'
         ]
       },
       { name: 'PayloadJson', displayName: 'Payload JSON', type: 'Note' },
       { name: 'StepsJson', displayName: 'Steps JSON', type: 'Note' },
-      { name: 'ScheduledFor', displayName: 'Scheduled For', type: 'DateTime' },
+      // Indexed so the due-jobs digest Flow (provisioning-assets/due-jobs-flow.md)
+      // can filter on it without hitting the list view threshold.
+      { name: 'ScheduledFor', displayName: 'Scheduled For', type: 'DateTime', indexed: true },
       { name: 'RequestedBy', displayName: 'Requested By', type: 'User' },
       { name: 'ApprovedBy', displayName: 'Approved By', type: 'User' },
       { name: 'CorrelationId', displayName: 'Correlation Id', type: 'Text' },
@@ -87,7 +90,8 @@ export const UPC_LIST_DEFINITIONS: IUpcListDefinition[] = [
       { name: 'TargetUserId', displayName: 'Target User Id', type: 'Text' },
       { name: 'RunningInstanceId', displayName: 'Running Instance Id', type: 'Text' },
       { name: 'RunningSince', displayName: 'Running Since', type: 'DateTime' },
-      { name: 'ApprovalsJson', displayName: 'Approvals JSON', type: 'Note' }
+      { name: 'ApprovalsJson', displayName: 'Approvals JSON', type: 'Note' },
+      { name: 'NotesJson', displayName: 'Notes JSON', type: 'Note' }
     ]
   },
   {

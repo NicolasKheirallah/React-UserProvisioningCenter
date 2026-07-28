@@ -4,11 +4,13 @@ import { useServices } from '../contexts/ServicesContext';
 import {
   QK_APP_ROLES,
   QK_APPLICATION_CATALOG,
+  QK_APPLICATION_CATALOG_ALL,
   QK_AUDIT_SEARCH,
   QK_DELEGATIONS,
   QK_JOB_CHANGE_TOKEN,
   QK_JOB_DETAIL,
   QK_JOB_SUMMARIES,
+  QK_LICENSE_COSTS_ALL,
   QK_PREFLIGHT,
   QK_ROLES,
   QK_SITE_CATALOG,
@@ -26,6 +28,7 @@ import type {
   IAuditQuery,
   IJobQuery,
   IJobSummary,
+  ILicenseCostItem,
   ILicenseOption,
   IPreflightResult,
   IProvisioningJob,
@@ -114,6 +117,21 @@ export function useApplicationCatalog(): UseQueryResult<IApplicationCatalogItem[
   });
 }
 
+/** Every application row, including deactivated ones — for the Catalogs tab. */
+export function useApplicationCatalogAll(): UseQueryResult<IApplicationCatalogItem[]> {
+  const services = useServices();
+  return useQuery(QK_APPLICATION_CATALOG_ALL, () => services.data.getApplicationCatalogAll(), {
+    staleTime: OPERATIONAL_STALE_MS
+  });
+}
+
+export function useLicenseCostsForManagement(): UseQueryResult<ILicenseCostItem[]> {
+  const services = useServices();
+  return useQuery(QK_LICENSE_COSTS_ALL, () => services.data.getLicenseCostsForManagement(), {
+    staleTime: OPERATIONAL_STALE_MS
+  });
+}
+
 export function useRoleDefinitionsForManagement(): UseQueryResult<IRoleManagementItem[]> {
   const services = useServices();
   return useQuery(QK_ROLES, () => services.data.getRoleDefinitionsForManagement(), {
@@ -159,7 +177,8 @@ export function useJobDetail(itemId: number | null, pollWhileRunning: boolean): 
     () => services.data.getJob(itemId as number),
     {
       enabled: itemId !== null && itemId !== undefined,
-      refetchInterval: pollWhileRunning && visible ? CHANGE_TOKEN_POLL_MS : false
+      refetchInterval:
+        pollWhileRunning && visible ? (_data, query) => (query.state.error ? false : CHANGE_TOKEN_POLL_MS) : false
     }
   );
 }

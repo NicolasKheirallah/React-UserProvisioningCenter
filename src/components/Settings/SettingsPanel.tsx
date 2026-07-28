@@ -2,6 +2,7 @@ import * as React from 'react';
 import {
   Button,
   Field,
+  Input,
   MessageBar,
   MessageBarBody,
   SpinButton,
@@ -31,6 +32,9 @@ const useStyles = makeStyles({
   },
   numberField: {
     maxWidth: '240px'
+  },
+  textField: {
+    maxWidth: '420px'
   },
   actions: {
     display: 'flex',
@@ -168,6 +172,19 @@ export const SettingsPanel: React.FC = () => {
               )
             })
           }
+        />
+      </Field>
+
+      <Field
+        label={strings.SettingsApprovalNotifyLabel}
+        hint={strings.SettingsApprovalNotifyHint}
+        className={styles.textField}
+      >
+        <Input
+          type="email"
+          value={draft.approvalNotifyUpn}
+          placeholder="provisioning-approvers@contoso.com"
+          onChange={(_, data) => updateDraft({ ...draft, approvalNotifyUpn: data.value })}
         />
       </Field>
 

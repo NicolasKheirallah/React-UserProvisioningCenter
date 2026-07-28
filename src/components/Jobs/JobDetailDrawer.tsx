@@ -2,15 +2,23 @@ import * as React from 'react';
 import {
   Badge,
   Button,
+  Dialog,
+  DialogActions,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
   Drawer,
   DrawerBody,
   DrawerHeader,
   DrawerHeaderTitle,
+  Field,
   MessageBar,
   MessageBarBody,
   ProgressBar,
   Spinner,
   Text,
+  Textarea,
   Toolbar,
   ToolbarButton,
   makeStyles,
@@ -282,6 +290,16 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     rowGap: tokens.spacingVerticalXS
   },
+  noteForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    rowGap: tokens.spacingVerticalXS,
+    marginTop: tokens.spacingVerticalS
+  },
+  rejectField: {
+    marginTop: tokens.spacingVerticalM
+  },
   auditRow: {
     display: 'flex',
     alignItems: 'center',
@@ -412,6 +430,10 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
   const [hasRun, setHasRun] = React.useState<boolean>(false);
   const [confirmCancel, setConfirmCancel] = React.useState<boolean>(false);
   const [confirmRollback, setConfirmRollback] = React.useState<boolean>(false);
+  const [rejectOpen, setRejectOpen] = React.useState<boolean>(false);
+  const [rejectReason, setRejectReason] = React.useState<string>('');
+  const [noteText, setNoteText] = React.useState<string>('');
+  const [savingNote, setSavingNote] = React.useState<boolean>(false);
   const [actionError, setActionError] = React.useState<string | undefined>(undefined);
   const [pendingCredential, setPendingCredential] = React.useState<IPendingCredential | null>(null);
   const [elapsedMs, setElapsedMs] = React.useState<number>(0);
@@ -543,6 +565,46 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
     });
   };
 
+  const reject = (): void => {
+    const reason: string = rejectReason.trim();
+    if (!reason) {
+      return;
+    }
+    setRejectOpen(false);
+    void runAction(async () => {
+      await services.engine.rejectJob(itemId, reason);
+      setRejectReason('');
+      toast(strings.RejectedToast, 'warning');
+      await detail.refetch();
+    });
+  };
+
+  const addNote = async (): Promise<void> => {
+    const text: string = noteText.trim();
+    if (!text) {
+      return;
+    }
+    setSavingNote(true);
+    try {
+      await services.engine.addJobNote(itemId, text);
+      setNoteText('');
+      toast(strings.NoteSavedToast);
+      await detail.refetch();
+    } catch {
+      toast(strings.NoteSaveFailed, 'error');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const duplicate = (): void => {
+    void runAction(async () => {
+      await services.engine.duplicateJob(itemId);
+      void queryClient.invalidateQueries(QK_JOB_SUMMARIES);
+      toast(strings.DuplicateJobToast);
+    });
+  };
+
   const cancel = (): void => {
     setConfirmCancel(false);
     void runAction(async () => {
@@ -606,12 +668,41 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
       </Drawer>
     );
   }
+  if (detail.isError && !liveJob) {
+    return (
+      <Drawer type="overlay" position={isNarrow ? 'bottom' : 'end'} size="medium" open={true} onOpenChange={(_, data) => !data.open && onClose()}>
+        <DrawerHeader>
+          <DrawerHeaderTitle
+            action={<Button appearance="subtle" aria-label={strings.CloseLabel} icon={<Dismiss24Regular />} onClick={onClose} />}
+          >
+            {strings.JobDetailTitle}
+          </DrawerHeaderTitle>
+        </DrawerHeader>
+        <DrawerBody className={styles.body}>
+          <MessageBar intent="error">
+            <MessageBarBody>
+              {detail.error instanceof Error ? detail.error.message : strings.JobLoadFailedMessage}
+            </MessageBarBody>
+          </MessageBar>
+          <Button
+            onClick={() => {
+              void detail.refetch();
+            }}
+          >
+            {strings.RetryLabel}
+          </Button>
+        </DrawerBody>
+      </Drawer>
+    );
+  }
   if (!liveJob) {
     return null;
   }
 
   const isRestrictedNonMember: boolean = !!approverGroupId && approverMembership.data === false;
   const showApprove: boolean = liveJob.status === 'PendingApproval' && can('approveJobs') && !isRestrictedNonMember;
+  const showReject: boolean = showApprove && !running;
+  const showDuplicate: boolean = isTerminal(liveJob.status) && can('createJobs') && !running;
   const showRun: boolean = canStartJob(liveJob.status) && can('runJobs') && !running;
   const showCancel: boolean = !isTerminal(liveJob.status) && can('cancelJobs') && !running;
   const showRegenerate: boolean =
@@ -720,9 +811,11 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
               {liveJob.status === 'Running' || liveJob.status === 'PartiallyFailed' ? strings.ResumeLabel : strings.RunLabel}
             </ToolbarButton>
           ) : undefined}
+          {showReject ? <ToolbarButton onClick={() => setRejectOpen(true)}>{strings.RejectLabel}</ToolbarButton> : undefined}
           {showCancel ? <ToolbarButton onClick={() => setConfirmCancel(true)}>{strings.CancelJobLabel}</ToolbarButton> : undefined}
           {showRegenerate ? <ToolbarButton onClick={regenerateCredentials}>{strings.RegenerateCredentialsLabel}</ToolbarButton> : undefined}
           {showRollback ? <ToolbarButton onClick={() => setConfirmRollback(true)}>{strings.RollbackLabel}</ToolbarButton> : undefined}
+          {showDuplicate ? <ToolbarButton onClick={duplicate}>{strings.DuplicateJobLabel}</ToolbarButton> : undefined}
         </Toolbar>
 
         {isRestrictedNonMember && liveJob.status === 'PendingApproval' ? (
@@ -847,6 +940,52 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
           </MessageBar>
         ) : undefined}
 
+        <div className={styles.auditSection}>
+          <Text className={styles.sectionTitle}>{strings.NotesTitle}</Text>
+          {(liveJob.notes ?? []).length === 0 ? (
+            <Text className={styles.auditMeta}>{strings.NotesEmpty}</Text>
+          ) : (
+            <div>
+              {(liveJob.notes ?? []).map((note, index) => (
+                <div key={`${note.timestampUtc}-${index}`} className={styles.auditRow}>
+                  <div className={styles.auditAction}>
+                    <Text size={200} block>
+                      {note.text}
+                    </Text>
+                    <span className={styles.auditMeta}>
+                      {note.timestampUtc ? new Date(note.timestampUtc).toLocaleString() : ''}
+                      {note.author ? ` · ${note.author}` : ''}
+                    </span>
+                  </div>
+                  {note.kind === 'rejection' ? (
+                    <Badge appearance="tint" color="danger">
+                      {strings.NoteRejectionBadge}
+                    </Badge>
+                  ) : undefined}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className={styles.noteForm}>
+            <Textarea
+              value={noteText}
+              placeholder={strings.NoteAddPlaceholder}
+              resize="vertical"
+              rows={2}
+              onChange={(_, data) => setNoteText(data.value)}
+            />
+            <Button
+              size="small"
+              disabled={savingNote || !noteText.trim()}
+              onClick={() => {
+                void addNote();
+              }}
+            >
+              {strings.NoteAddLabel}
+            </Button>
+          </div>
+        </div>
+
         {canViewAudit ? (
           <div className={styles.auditSection}>
             <div className={styles.sectionHeaderRow}>
@@ -913,6 +1052,40 @@ export const JobDetailDrawer: React.FC<IJobDetailDrawerProps> = ({ itemId, onClo
         onCancel={() => setConfirmCancel(false)}
         confirmDisabled={running}
       />
+      <Dialog
+        modalType="alert"
+        open={rejectOpen}
+        onOpenChange={(_, data) => {
+          if (!data.open) {
+            setRejectOpen(false);
+          }
+        }}
+      >
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>{strings.RejectDialogTitle}</DialogTitle>
+            <DialogContent>
+              <Text block>{strings.RejectDialogBody}</Text>
+              <Field label={strings.RejectReasonLabel} required className={styles.rejectField}>
+                <Textarea
+                  value={rejectReason}
+                  resize="vertical"
+                  rows={3}
+                  onChange={(_, data) => setRejectReason(data.value)}
+                />
+              </Field>
+            </DialogContent>
+            <DialogActions>
+              <Button appearance="secondary" onClick={() => setRejectOpen(false)}>
+                {strings.KeepJobLabel}
+              </Button>
+              <Button appearance="primary" onClick={reject} disabled={running || !rejectReason.trim()}>
+                {strings.RejectConfirmLabel}
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </Drawer>
   );
 };

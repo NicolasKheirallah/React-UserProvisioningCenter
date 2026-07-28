@@ -179,6 +179,7 @@ declare interface IUpcStrings {
   JobColumnStatus: string;
   JobColumnRequestedBy: string;
   JobDetailTitle: string;
+  JobLoadFailedMessage: string;
   JobStepsTitle: string;
   ApproveLabel: string;
   RunLabel: string;
@@ -503,6 +504,84 @@ declare interface IUpcStrings {
   DiagnosticsEmpty: string;
   QueryPausedTitle: string;
   QueryPausedBody: string;
+
+  JobStatusRejected: string;
+  RejectLabel: string;
+  RejectDialogTitle: string;
+  RejectDialogBody: string;
+  RejectReasonLabel: string;
+  RejectConfirmLabel: string;
+  RejectedToast: string;
+  RejectFailed: string;
+
+  NotesTitle: string;
+  NotesEmpty: string;
+  NoteAddPlaceholder: string;
+  NoteAddLabel: string;
+  NoteSavedToast: string;
+  NoteSaveFailed: string;
+  NoteRejectionBadge: string;
+
+  DuplicateJobLabel: string;
+  DuplicateJobToast: string;
+  DuplicateJobFailed: string;
+
+  MyRequestsFilterLabel: string;
+
+  SettingsApprovalNotifyLabel: string;
+  SettingsApprovalNotifyHint: string;
+
+  TabCatalogs: string;
+  CatalogsTitle: string;
+  CatalogsIntro: string;
+  CatalogTeamsTitle: string;
+  CatalogSitesTitle: string;
+  CatalogAppsTitle: string;
+  CatalogLicenseCostsTitle: string;
+  CatalogAddLabel: string;
+  CatalogEditLabel: string;
+  CatalogDeleteLabel: string;
+  CatalogSaveLabel: string;
+  CatalogCancelLabel: string;
+  CatalogSavedToast: string;
+  CatalogSaveFailed: string;
+  CatalogDeletedToast: string;
+  CatalogDeleteFailed: string;
+  CatalogDeleteConfirmTitle: string;
+  CatalogDeleteConfirmBody: string;
+  CatalogEmptyTitle: string;
+  CatalogEmptyBody: string;
+  CatalogFieldTitle: string;
+  CatalogFieldTeamId: string;
+  CatalogFieldCategory: string;
+  CatalogFieldDefaultRole: string;
+  CatalogFieldSiteUrl: string;
+  CatalogFieldProvisioningType: string;
+  CatalogFieldTargetGroupId: string;
+  CatalogFieldApprovalRequired: string;
+  CatalogFieldInstructions: string;
+  CatalogFieldIsActive: string;
+  CatalogFieldSkuPartNumber: string;
+  CatalogFieldMonthlyCost: string;
+  CatalogFieldCurrency: string;
+  CatalogInactiveBadge: string;
+
+  TabBulkTransfer: string;
+  BulkTransferTitle: string;
+  BulkTransferIntro: string;
+  BulkTransferTemplateLabel: string;
+  BulkTransferNoChanges: string;
+  BulkErrManagerNotFound: string;
+  BulkErrUnknownSku: string;
+
+  MailOnboardCompleteSubject: string;
+  MailOnboardCompleteBody: string;
+  MailOffboardCompleteSubject: string;
+  MailOffboardCompleteBody: string;
+  MailTransferCompleteSubject: string;
+  MailTransferCompleteBody: string;
+  MailApprovalPendingSubject: string;
+  MailApprovalPendingBody: string;
 }
 
 declare module 'UpcStrings' {

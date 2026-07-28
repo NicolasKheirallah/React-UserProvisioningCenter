@@ -1,3 +1,5 @@
+import * as strings from 'UpcStrings';
+import { formatString } from '../../util/formatString';
 import {
   STEP_BLOCK_SIGN_IN,
   STEP_CREATE_HANDOVER_TASKS,
@@ -229,10 +231,14 @@ async function runSendNotifications(ctx: IStepContext): Promise<void> {
   }
   const body = {
     message: {
-      subject: `Offboarding complete: ${payload.target.displayName}`,
+      subject: formatString(strings.MailOffboardCompleteSubject, payload.target.displayName),
       body: {
         contentType: 'Text',
-        content: `${payload.target.displayName}'s account (${payload.target.userPrincipalName}) has been offboarded. Sign-in is blocked and active sessions have been revoked.`
+        content: formatString(
+          strings.MailOffboardCompleteBody,
+          payload.target.displayName,
+          payload.target.userPrincipalName
+        )
       },
       toRecipients: [{ emailAddress: { address: notifyUpn } }]
     },
