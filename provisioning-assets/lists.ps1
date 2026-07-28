@@ -3,8 +3,9 @@
   Provisions the UPC_* SharePoint lists for the User Provisioning Center web part.
 
 .DESCRIPTION
-  Creates the ten lists defined by the solution's data contract (spec Section 4)
-  on the target site. Idempotent: existing lists/fields are left in place.
+  Creates the eleven lists defined by the solution's data contract (spec
+  Section 4) on the target site. Idempotent: existing lists/fields are left
+  in place.
 
   Requires the PnP.PowerShell module and site owner rights on the target site.
 
@@ -166,6 +167,16 @@ Ensure-Field UPC_Tasks CompletedUtc 'Completed (UTC)' DateTime
 # the in-app Settings tab (manageSettings permission).
 Ensure-List 'UPC_Settings' | Out-Null
 Ensure-Field UPC_Settings SettingsJson 'Settings JSON' Note
+
+# ---------------------------------------------------------------- UPC_ApprovalDelegations
+# Lets an approver delegate approveJobs to someone else for a time window
+# (manageDelegations permission). Title holds the delegating operator's UPN.
+Ensure-List 'UPC_ApprovalDelegations' | Out-Null
+Ensure-Field UPC_ApprovalDelegations DelegateUpn 'Delegate UPN' Text -Required
+Ensure-Field UPC_ApprovalDelegations StartUtc 'Start (UTC)' DateTime
+Ensure-Field UPC_ApprovalDelegations EndUtc 'End (UTC)' DateTime
+Ensure-Field UPC_ApprovalDelegations Reason 'Reason' Text
+Ensure-Field UPC_ApprovalDelegations IsActive 'Is Active' Boolean
 
 # ---------------------------------------------------------------- Seed data
 # Matches src/services/provisioning/listSeedItems.ts (the in-app "Provision

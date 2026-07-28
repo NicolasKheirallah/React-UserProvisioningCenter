@@ -110,6 +110,13 @@ and `@microsoft/sp-webpart-base` declare a hard peer dependency on `react <18`,
 and this project runs 18.3.1 anyway. A plain `npm install` will fail to
 resolve. Details on why that's safe are below.
 
+A [dev container](./.devcontainer/devcontainer.json) is included if you'd
+rather not install the SPFx toolchain locally — open the repo in VS Code and
+choose **Reopen in Container**. It runs `npm install --legacy-peer-deps` and
+trusts the dev cert automatically; you still point the hosted workbench at
+your local dev server, same as a local install (see the compatibility note
+below on why the *local* workbench specifically doesn't work here).
+
 Before the app does anything useful you also need to provision the `UPC_*`
 lists and seed the roles — see [Deployment checklist](#deployment-checklist).
 
@@ -117,7 +124,7 @@ lists and seed the roles — see [Deployment checklist](#deployment-checklist).
 
 | Surface | What it does | Visible to |
 |---|---|---|
-| **Dashboard** | KPI tiles that double as filters (pending approval, running, failed/completed last 7 days), search, type filter, sortable job grid with inline **Approve**, CSV export, a job drawer with live step progress, Run/Resume/Retry/Skip/Cancel, credential regeneration for completed jobs, and a per-job audit trail (also CSV-exportable) | everyone |
+| **Dashboard** | KPI tiles that double as filters (pending approval, running, failed/completed last 7 days), search, type filter, sortable job grid with inline **Approve**, CSV export, a job drawer with live step progress, Run/Resume/Retry/Skip/Cancel/**Rollback**, credential regeneration for completed jobs, and a per-job audit trail (also CSV-exportable) | everyone |
 | **New user** | Seven-step onboarding wizard (Personal → Employment → Identity → Account → Licenses → Access → Review) with template pre-fill, live UPN candidates from the naming policy engine, duplicate-employeeId checks, per-section review edit links, guest invites (`/invitations` instead of a cloud account), an access grants step (security/M365 groups, Teams, SharePoint sites, applications), an optional future-dated access-review task, and the option to clone an existing user's access profile onto a new hire. Drafts survive tab switches; **Start over** discards them | everyone |
 | **Offboard user** | Four-step wizard: pick the user → access removal choices (sign-in block and session revocation always run — routed to a manual on-prem AD task rather than a Graph write for hybrid-synced users; licenses, groups, mailbox action, OneDrive hand-over are all optional) → immediate or dated → review. Completion emails the OneDrive hand-over contact if one was named | everyone |
 | **Transfer** | Single-page form for an existing user — job title, department, office and manager changes (leave blank for no change) plus license add/remove — run through the same job/approval pipeline as everything else. Completion emails the user's current manager a summary of what changed | everyone |
@@ -126,7 +133,7 @@ lists and seed the roles — see [Deployment checklist](#deployment-checklist).
 | **Tasks** | The service-desk queue for everything the engine routed to `UPC_Tasks`; completing a task stamps who and when; CSV export | `manageTasks` |
 | **Templates** | Department templates that pre-fill the wizard — department, usage location, license set, access grants, expiration review policy — versioned and activatable. Can also name an Entra group that alone may approve jobs created from that template (per-template approval routing) | `manageTemplates` |
 | **Settings** | Tenant-shared configuration: approval gate on/off, bulk row limit, dashboard refresh interval | `manageSettings` |
-| **Roles** | Maps each app role to an Entra security group and the UI permissions it grants, editable in-app instead of hand-editing `UPC_Roles` | `manageSettings` |
+| **Roles** | Maps each app role to an Entra security group and the UI permissions it grants, editable in-app instead of hand-editing `UPC_Roles`. Also hosts **approval delegations** — time-boxed `approveJobs` hand-offs to another operator, with a reason | `manageSettings` (role mapping), `manageDelegations` (delegations) |
 
 Tabs a user isn't permitted to see are **not just disabled, they're gone**.
 If a tab seems to be missing, that's the first thing to check — the
@@ -153,6 +160,27 @@ restriction is enforced and explained if you're not eligible. Templates with
 no approver group behave exactly as before — anyone with `approveJobs` clears
 them.
 
+An operator with `approveJobs` can also **delegate** it to a named UPN for a
+date range, with a reason, from the Roles tab (`manageDelegations`). While a
+delegation is active, the delegate is granted `approveJobs` for the duration
+regardless of their own role assignment. Delegations are self-service — no
+approval loop of their own — so scope who can reach `manageDelegations`
+accordingly.
+
+### Rollback
+
+A job with `rollbackJobs` can be rolled back from the drawer once it's no
+longer running — whether it completed successfully or stalled partway
+through. Rollback walks the job's already-completed steps in reverse and
+runs each one's compensating action (e.g. removing group/Teams membership
+that `assign-groups`/`assign-teams` added, unassigning licenses, clearing
+the manager reference) where a compensation exists for that step; steps
+without one are left as-is. The job is then marked **Cancelled** and the
+outcome — which steps reverted, which failed to revert — is written to the
+audit trail. This undoes the *provisioning* side effects it can reverse
+through Graph; it does not, for example, recreate a deleted resource or
+undo something a `UPC_Tasks` service-desk task already completed by hand.
+
 ## Stack
 
 - SPFx 1.23 on the Heft build rig, **React 18.3.1 (an unsupported combination
@@ -172,11 +200,6 @@ them.
   endpoints
 - PnPJS v4 for SharePoint list access, TanStack Query for server state,
   React Hook Form + Yup for the wizards
-- Jest through the Heft plugin, covering services (including the Graph
-  client's own retry/backoff/batch logic, mocked at the `MSGraphClientV3`
-  boundary rather than only through the workflow engine's higher-level test
-  doubles), validators, the naming policy engine and the workflow state
-  machine
 
 ### SharePoint Online + Fluent v9 gotcha
 
@@ -193,7 +216,6 @@ doesn't reproduce there. Always check popups on a real SharePoint page.
 
 ```bash
 npm install --legacy-peer-deps
-npm test          # runs through heft
 npm run start      # local dev server + SPFx Debug Toolbar
 npm run build      # produces sharepoint/solution/user-provisioning-center.sppkg
 ```
@@ -222,7 +244,8 @@ npm run build      # produces sharepoint/solution/user-provisioning-center.sppkg
 
    ```json
    ["createJobs","approveJobs","runJobs","retrySteps","skipSteps",
-    "cancelJobs","manageTemplates","viewAudit","manageTasks","manageSettings"]
+    "cancelJobs","rollbackJobs","manageTemplates","viewAudit","manageTasks",
+    "manageSettings","manageDelegations"]
    ```
 
    Provisioning pre-fills `PermissionsJson` for you — `MemberGroupId` is the

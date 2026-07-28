@@ -158,7 +158,7 @@ export function useJobDetail(itemId: number | null, pollWhileRunning: boolean): 
     [...QK_JOB_DETAIL, itemId ?? 0],
     () => services.data.getJob(itemId as number),
     {
-      enabled: itemId !== null,
+      enabled: itemId !== null && itemId !== undefined,
       refetchInterval: pollWhileRunning && visible ? CHANGE_TOKEN_POLL_MS : false
     }
   );

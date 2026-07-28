@@ -336,7 +336,7 @@ export class SharePointDataService {
         () => this._sp.web.lists.getByTitle(listTitle).fields.select('InternalName').top(500)(),
         { circuitKey: listTitle, maxAttempts: 2 }
       );
-      const names: Set<string> = new Set(fields.map((f) => f.InternalName));
+      const names: Set<string> = new Set(fields.map((f) => f.InternalName.toLowerCase()));
       this._fieldCache.set(listTitle, names);
       return names;
     } catch {
@@ -349,8 +349,8 @@ export class SharePointDataService {
     if (!available) {
       return desired;
     }
-    const supported: string[] = desired.filter((field) => available.has(field.split('/')[0]));
-    const dropped: string[] = desired.filter((field) => !available.has(field.split('/')[0]));
+    const supported: string[] = desired.filter((field) => available.has(field.split('/')[0].toLowerCase()));
+    const dropped: string[] = desired.filter((field) => !available.has(field.split('/')[0].toLowerCase()));
     if (dropped.length > 0) {
       this._telemetry?.trackEvent(
         'data.select.degraded',
